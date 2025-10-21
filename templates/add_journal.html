@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新增日誌 - 旅行日誌</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200">
+    <!-- 導航欄 -->
+    <nav class="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="text-xl font-light text-slate-700">旅行日誌</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="/dashboard" class="text-slate-600 hover:text-slate-800 text-sm transition-colors">返回主頁</a>
+                <a href="/logout" class="text-slate-500 hover:text-slate-700 text-sm transition-colors">登出</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 新增日誌主體 -->
+    <div class="max-w-3xl mx-auto px-4 py-10">
+        <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-md">
+            <h2 class="text-2xl font-light text-slate-700 mb-6 text-center">新增旅遊日誌</h2>
+            <form id="addJournalForm" class="space-y-5">
+                <div>
+                    <label class="block text-slate-600 text-sm mb-2">日期</label>
+                    <input type="date" id="date" required
+                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
+                </div>
+
+                <div>
+                    <label class="block text-slate-600 text-sm mb-2">地點</label>
+                    <input type="text" id="location" placeholder="例如：東京塔" required
+                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
+                </div>
+
+                <div>
+                    <label class="block text-slate-600 text-sm mb-2">國家</label>
+                    <input type="text" id="country" placeholder="例如：日本" required
+                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-600 text-sm mb-2">緯度 (可選)</label>
+                        <input type="number" step="any" id="lat" placeholder="35.6586"
+                            class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
+                    </div>
+                    <div>
+                        <label class="block text-slate-600 text-sm mb-2">經度 (可選)</label>
+                        <input type="number" step="any" id="lng" placeholder="139.7454"
+                            class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-600 text-sm mb-2">日誌內容</label>
+                    <textarea id="content" rows="6" placeholder="記錄你的旅程..." required
+                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 resize-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-slate-600 text-sm mb-2">地圖選擇位置 (可選)</label>
+                    <div id="map" class="w-full h-64 rounded-xl"></div>
+                </div>
+
+                <div class="flex space-x-4 pt-4">
+                    <a href="/dashboard" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl text-center transition-colors">
+                        取消
+                    </a>
+                    <button type="submit" class="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-3 rounded-xl transition-colors">
+                        儲存日誌
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 初始化地圖
+        const map = L.map('map').setView([25.0330, 121.5654], 3);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let marker = null;
+        map.on('click', function(e) {
+            const { lat, lng } = e.latlng;
+            document.getElementById('lat').value = lat.toFixed(6);
+            document.getElementById('lng').value = lng.toFixed(6);
+
+            if (marker) marker.remove();
+            marker = L.marker([lat, lng]).addTo(map);
+        });
+
+        // 預設日期為今日
+        document.getElementById('date').value = new Date().toISOString().split('T')[0];
+
+        // 提交表單
+        document.getElementById('addJournalForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                date: document.getElementById('date').value,
+                location: document.getElementById('location').value,
+                country: document.getElementById('country').value,
+                lat: parseFloat(document.getElementById('lat').value) || 0,
+                lng: parseFloat(document.getElementById('lng').value) || 0,
+                content: document.getElementById('content').value
+            };
+
+            try {
+                const res = await fetch('/api/journals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+
+                if (result.success) {
+                    window.location.href = '/dashboard';
+                } else {
+                    alert('新增失敗，請稍後再試');
+                }
+            } catch (err) {
+                alert('伺服器錯誤，請稍後再試');
+            }
+        });
+    </script>
+</body>
+</html>

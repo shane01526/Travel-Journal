@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>註冊 - 旅行日誌</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200 flex items-center justify-center p-4">
+    <a href="/" class="absolute top-6 left-6 flex items-center space-x-2 text-slate-600 hover:text-slate-800 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+        </svg>
+        <span class="text-sm">返回</span>
+    </a>
+
+    <div class="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl p-8 w-full max-w-md">
+        <div class="text-center mb-8">
+            <svg class="w-16 h-16 mx-auto mb-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <h1 class="text-3xl font-light text-slate-700 mb-2">註冊</h1>
+            <p class="text-slate-500 text-sm">開始你的旅程</p>
+        </div>
+
+        <form id="registerForm" class="space-y-4">
+            <div>
+                <label class="block text-slate-600 text-sm mb-2">姓名</label>
+                <input type="text" id="name" required
+                    class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 transition-colors">
+            </div>
+            <div>
+                <label class="block text-slate-600 text-sm mb-2">帳號</label>
+                <input type="email" id="email" required
+                    class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 transition-colors">
+            </div>
+            <div>
+                <label class="block text-slate-600 text-sm mb-2">密碼</label>
+                <input type="password" id="password" required minlength="6"
+                    class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 transition-colors">
+            </div>
+            <div id="errorMessage" class="hidden text-red-500 text-sm text-center"></div>
+            <button type="submit" 
+                class="w-full bg-slate-500 hover:bg-slate-600 text-white py-3 rounded-xl transition-colors font-medium">
+                註冊
+            </button>
+            <button type="button" id="googleLogin"
+                class="w-full bg-white border-2 border-slate-300 hover:bg-slate-50 text-slate-700 py-3 rounded-xl transition-colors font-medium">
+                使用 Google 註冊
+            </button>
+            <p class="text-center text-slate-500 text-sm">
+                已經有帳號？ 
+                <a href="/login" class="text-slate-700 ml-1 underline hover:text-slate-900">登入</a>
+            </p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+
+            if (password.length < 6) {
+                errorDiv.textContent = '密碼至少需要 6 個字元';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.href = '/dashboard';
+                } else {
+                    errorDiv.textContent = data.message;
+                    errorDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                errorDiv.textContent = '註冊失敗，請稍後再試';
+                errorDiv.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('googleLogin').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/google-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    window.location.href = '/dashboard';
+                }
+            } catch (error) {
+                alert('登入失敗，請稍後再試');
+            }
+        });
+    </script>
+</body>
+</html>

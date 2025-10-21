@@ -108,6 +108,10 @@ def dashboard():
         return redirect(url_for('login'))
     
     user = User.query.get(session['user_id'])
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
+    
     journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
     
     countries = list(set([j.country for j in journals]))
@@ -137,7 +141,7 @@ def journals_api():
         )
         db.session.add(new_journal)
         db.session.commit()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'id': new_journal.id})
     
     journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.created_at.desc()).all()
     return jsonify([{
@@ -149,6 +153,19 @@ def journals_api():
         'lat': j.lat,
         'lng': j.lng
     } for j in journals])
+
+@app.route('/api/journals/<int:journal_id>', methods=['DELETE'])
+def delete_journal(journal_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '未登入'}), 401
+    
+    journal = Journal.query.get_or_404(journal_id)
+    if journal.user_id != session['user_id']:
+        return jsonify({'success': False, 'message': '無權限'}), 403
+    
+    db.session.delete(journal)
+    db.session.commit()
+    return jsonify({'success': True})
 
 @app.route('/api/journals/country/<country>')
 def journals_by_country(country):
@@ -164,5 +181,13 @@ def journals_by_country(country):
         'content': j.content
     } for j in journals])
 
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

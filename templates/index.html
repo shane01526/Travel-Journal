@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>待辦事項清單</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .add-todo {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .add-todo form {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .add-todo input {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .add-todo input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .add-todo button {
+            padding: 12px 25px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .add-todo button:hover {
+            background: #5568d3;
+        }
+        
+        .todo-list {
+            padding: 20px;
+        }
+        
+        .todo-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.3s;
+        }
+        
+        .todo-item:hover {
+            background: #f8f9fa;
+        }
+        
+        .todo-item:last-child {
+            border-bottom: none;
+        }
+        
+        .todo-checkbox {
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        
+        .todo-title {
+            flex: 1;
+            font-size: 16px;
+        }
+        
+        .todo-title.completed {
+            text-decoration: line-through;
+            color: #999;
+        }
+        
+        .todo-delete {
+            padding: 8px 15px;
+            background: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .todo-delete:hover {
+            background: #ee5a6f;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .error-message {
+            background: #ff4757;
+            color: white;
+            padding: 15px;
+            margin: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✨ 待辦事項清單</h1>
+            <p>管理你的每日任務</p>
+        </div>
+        
+        <div class="add-todo">
+            <form id="addTodoForm">
+                <input 
+                    type="text" 
+                    id="todoInput" 
+                    placeholder="輸入新的待辦事項..." 
+                    required
+                    autocomplete="off"
+                >
+                <button type="submit">新增</button>
+            </form>
+        </div>
+        
+        {% if error %}
+        <div class="error-message">
+            ⚠️ 資料庫連線錯誤: {{ error }}
+        </div>
+        {% endif %}
+        
+        <div class="todo-list" id="todoList">
+            {% if todos %}
+                {% for todo in todos %}
+                <div class="todo-item" data-id="{{ todo.id }}">
+                    <input 
+                        type="checkbox" 
+                        class="todo-checkbox" 
+                        {% if todo.completed %}checked{% endif %}
+                    >
+                    <span class="todo-title {% if todo.completed %}completed{% endif %}">
+                        {{ todo.title }}
+                    </span>
+                    <button class="todo-delete">刪除</button>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p>目前沒有待辦事項</p>
+                    <p>開始新增一些任務吧！</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // 新增待辦事項
+        document.getElementById('addTodoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('todoInput');
+            const title = input.value.trim();
+            
+            if (!title) return;
+            
+            try {
+                const response = await fetch('/api/todos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title })
+                });
+                
+                if (response.ok) {
+                    input.value = '';
+                    location.reload();
+                } else {
+                    alert('新增失敗，請稍後再試');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('新增失敗，請稍後再試');
+            }
+        });
+        
+        // 切換完成狀態
+        document.querySelectorAll('.todo-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', async (e) => {
+                const todoItem = e.target.closest('.todo-item');
+                const todoId = todoItem.dataset.id;
+                const completed = e.target.checked;
+                
+                try {
+                    const response = await fetch(`/api/todos/${todoId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ completed })
+                    });
+                    
+                    if (response.ok) {
+                        const titleElement = todoItem.querySelector('.todo-title');
+                        if (completed) {
+                            titleElement.classList.add('completed');
+                        } else {
+                            titleElement.classList.remove('completed');
+                        }
+                    } else {
+                        e.target.checked = !completed;
+                        alert('更新失敗，請稍後再試');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    e.target.checked = !completed;
+                    alert('更新失敗，請稍後再試');
+                }
+            });
+        });
+        
+        // 刪除待辦事項
+        document.querySelectorAll('.todo-delete').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const todoItem = e.target.closest('.todo-item');
+                const todoId = todoItem.dataset.id;
+                
+                if (!confirm('確定要刪除這個待辦事項嗎？')) return;
+                
+                try {
+                    const response = await fetch(`/api/todos/${todoId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        todoItem.remove();
+                        
+                        // 檢查是否沒有待辦事項了
+                        const todoList = document.getElementById('todoList');
+                        if (todoList.children.length === 0) {
+                            location.reload();
+                        }
+                    } else {
+                        alert('刪除失敗，請稍後再試');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('刪除失敗，請稍後再試');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -189,11 +189,17 @@
         const markers = {};
 
         // 從伺服器獲取日誌資料
-        const journals = {{ journals | tojson }};
+        const journals = {{ journals | tojson | safe }};
+        
+        console.log('載入的日誌數量:', journals.length);
+        console.log('日誌資料:', journals);
 
         // 添加標記到地圖
         journals.forEach(journal => {
-            if (journal.lat && journal.lng && (journal.lat !== 0 || journal.lng !== 0)) {
+            console.log('處理日誌:', journal.id, '座標:', journal.lat, journal.lng);
+            
+            // 檢查座標是否有效（不是 0,0）
+            if (journal.lat && journal.lng && (Math.abs(journal.lat) > 0.001 || Math.abs(journal.lng) > 0.001)) {
                 // 建立彈出視窗內容
                 const popupContent = `
                     <div class="popup-title">${journal.location}</div>
@@ -215,6 +221,10 @@
 
                 // 儲存標記引用
                 markers[journal.id] = marker;
+                
+                console.log('已新增標記:', journal.id, '位置:', journal.lat, journal.lng);
+            } else {
+                console.log('座標無效，跳過標記:', journal.id);
             }
         });
 
@@ -222,6 +232,9 @@
         if (Object.keys(markers).length > 0) {
             const group = L.featureGroup(Object.values(markers));
             map.fitBounds(group.getBounds().pad(0.1));
+            console.log('已調整地圖視野以顯示', Object.keys(markers).length, '個標記');
+        } else {
+            console.log('沒有有效的標記可顯示');
         }
 
         // 定位到特定地點
@@ -231,7 +244,7 @@
             // 找到並打開對應的標記彈窗
             Object.values(markers).forEach(marker => {
                 const markerLatLng = marker.getLatLng();
-                if (markerLatLng.lat === lat && markerLatLng.lng === lng) {
+                if (Math.abs(markerLatLng.lat - lat) < 0.0001 && Math.abs(markerLatLng.lng - lng) < 0.0001) {
                     marker.openPopup();
                 }
             });

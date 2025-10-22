@@ -29,10 +29,15 @@
             line-height: 1.5;
             max-height: 150px;
             overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        .popup-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
         }
         .popup-button {
-            display: inline-block;
-            margin-top: 10px;
+            flex: 1;
             padding: 6px 12px;
             background-color: #64748b;
             color: white;
@@ -40,9 +45,18 @@
             text-decoration: none;
             font-size: 13px;
             transition: background-color 0.2s;
+            text-align: center;
+            cursor: pointer;
+            border: none;
         }
         .popup-button:hover {
             background-color: #475569;
+        }
+        .popup-button.edit {
+            background-color: #3b82f6;
+        }
+        .popup-button.edit:hover {
+            background-color: #2563eb;
         }
     </style>
 </head>
@@ -103,7 +117,7 @@
         <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-md mb-8">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-light text-slate-700">🗺️ 旅行地圖</h2>
-                <span class="text-sm text-slate-500">點擊標記查看日誌</span>
+                <span class="text-sm text-slate-500">點擊標記查看和編輯日誌</span>
             </div>
             <div id="map" class="w-full h-96 rounded-xl"></div>
         </div>
@@ -117,7 +131,7 @@
                     <div class="border-l-4 border-slate-400 pl-4 py-3 hover:bg-slate-50 rounded transition-colors" data-journal-id="{{ journal.id }}">
                         <div class="flex justify-between items-start">
                             <div class="flex-1">
-                                <div class="flex items-center space-x-2 mb-2">
+                                <div class="flex items-center space-x-2 mb-2 flex-wrap">
                                     <span class="text-slate-500 text-sm">{{ journal.date }}</span>
                                     <span class="text-slate-400">•</span>
                                     <span class="text-slate-600 font-medium">{{ journal.location }}</span>
@@ -134,11 +148,18 @@
                                 </div>
                                 <p class="text-slate-600 text-sm">{{ journal.content[:150] }}{% if journal.content|length > 150 %}...{% endif %}</p>
                             </div>
-                            <button onclick="deleteJournal({{ journal.id }})" class="text-red-400 hover:text-red-600 transition-colors ml-4">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                </svg>
-                            </button>
+                            <div class="flex space-x-2 ml-4">
+                                <a href="/edit_journal/{{ journal.id }}" class="text-blue-500 hover:text-blue-700 transition-colors" title="編輯">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                </a>
+                                <button onclick="deleteJournal({{ journal.id }})" class="text-red-400 hover:text-red-600 transition-colors" title="刪除">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -178,6 +199,10 @@
                     <div class="popup-title">${journal.location}</div>
                     <div class="popup-date">📅 ${journal.date} | 🌍 ${journal.country}</div>
                     <div class="popup-content">${journal.content}</div>
+                    <div class="popup-buttons">
+                        <a href="/edit_journal/${journal.id}" class="popup-button edit">✏️ 編輯</a>
+                        <button onclick="viewJournalDetail(${journal.id})" class="popup-button">📖 詳情</button>
+                    </div>
                 `;
 
                 // 建立標記
@@ -213,6 +238,18 @@
 
             // 平滑滾動到地圖
             document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        // 查看日誌詳情（滾動到列表）
+        function viewJournalDetail(id) {
+            const journalElement = document.querySelector(`[data-journal-id="${id}"]`);
+            if (journalElement) {
+                journalElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                journalElement.classList.add('bg-blue-50');
+                setTimeout(() => {
+                    journalElement.classList.remove('bg-blue-50');
+                }, 2000);
+            }
         }
 
         // 刪除日誌

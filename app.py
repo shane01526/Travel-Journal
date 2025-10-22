@@ -271,14 +271,30 @@ def dashboard():
             flash('用戶不存在，請重新登入')
             return redirect(url_for('login'))
 
+        # 確保從資料庫重新查詢最新的日誌資料
         journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
+        
+        # 轉換為字典列表，確保所有欄位都正確傳遞
+        journals_data = []
+        for j in journals:
+            journals_data.append({
+                'id': j.id,
+                'date': j.date,
+                'location': j.location,
+                'country': j.country,
+                'content': j.content,
+                'lat': float(j.lat) if j.lat else 0.0,
+                'lng': float(j.lng) if j.lng else 0.0
+            })
+        
         countries = list({j.country for j in journals})
         
         logger.info(f"用戶 {user.name} 查看 dashboard，共有 {len(journals)} 篇日誌")
+        logger.info(f"日誌資料: {journals_data}")
         
         return render_template('dashboard.html',
                                user=user,
-                               journals=journals,
+                               journals=journals_data,
                                countries=countries,
                                journal_count=len(journals),
                                country_count=len(countries))
@@ -351,16 +367,21 @@ def _create_journal_from_data(data):
         if not date:
             date = datetime.utcnow().strftime('%Y-%m-%d')
 
+        # 確保座標是正確的浮點數
         lat = 0.0
         lng = 0.0
         try:
-            if 'lat' in data and data.get('lat') not in (None, ''):
+            if 'lat' in data and data.get('lat') not in (None, '', 'null', 'undefined'):
                 lat = float(data.get('lat'))
-            if 'lng' in data and data.get('lng') not in (None, ''):
+            if 'lng' in data and data.get('lng') not in (None, '', 'null', 'undefined'):
                 lng = float(data.get('lng'))
-        except ValueError as e:
-            logger.error(f"座標轉換錯誤: {e}")
-            return ({'success': False, 'message': 'lat/lng 需為數值'}, 400)
+        except (ValueError, TypeError) as e:
+            logger.error(f"座標轉換錯誤: {e}, lat={data.get('lat')}, lng={data.get('lng')}")
+            # 如果座標轉換失敗，使用預設值 0.0
+            lat = 0.0
+            lng = 0.0
+
+        logger.info(f"座標值: lat={lat}, lng={lng}")
 
         new_journal = Journal(
             date=date,
@@ -375,7 +396,7 @@ def _create_journal_from_data(data):
         db.session.add(new_journal)
         db.session.commit()
         
-        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}")
+        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}, Lat={lat}, Lng={lng}")
         
         return ({'success': True, 'id': new_journal.id, 'journal': {
             'id': new_journal.id,
@@ -409,8 +430,8 @@ def journals_api():
             'location': j.location,
             'country': j.country,
             'content': j.content,
-            'lat': j.lat,
-            'lng': j.lng
+            'lat': float(j.lat) if j.lat else 0.0,
+            'lng': float(j.lng) if j.lng else 0.0
         } for j in journals])
     except Exception as e:
         logger.error(f"取得日誌列表失敗: {e}\n{traceback.format_exc()}")
@@ -439,10 +460,17 @@ def journal_detail(journal_id):
             journal.country = data.get('country', journal.country)
             journal.content = data.get('content', journal.content)
             
+            # 更新座標
             if 'lat' in data:
-                journal.lat = float(data.get('lat', 0))
+                try:
+                    journal.lat = float(data.get('lat', 0))
+                except (ValueError, TypeError):
+                    journal.lat = 0.0
             if 'lng' in data:
-                journal.lng = float(data.get('lng', 0))
+                try:
+                    journal.lng = float(data.get('lng', 0))
+                except (ValueError, TypeError):
+                    journal.lng = 0.0
             
             journal.updated_at = datetime.utcnow()
             db.session.commit()
@@ -456,8 +484,8 @@ def journal_detail(journal_id):
                     'location': journal.location,
                     'country': journal.country,
                     'content': journal.content,
-                    'lat': journal.lat,
-                    'lng': journal.lng
+                    'lat': float(journal.lat) if journal.lat else 0.0,
+                    'lng': float(journal.lng) if journal.lng else 0.0
                 }
             })
         
@@ -468,8 +496,8 @@ def journal_detail(journal_id):
             'location': journal.location,
             'country': journal.country,
             'content': journal.content,
-            'lat': journal.lat,
-            'lng': journal.lng
+            'lat': float(journal.lat) if journal.lat else 0.0,
+            'lng': float(journal.lng) if journal.lng else 0.0
         })
     except Exception as e:
         db.session.rollback()
@@ -489,8 +517,8 @@ def journals_by_country(country):
             'location': j.location,
             'country': j.country,
             'content': j.content,
-            'lat': j.lat,
-            'lng': j.lng
+            'lat': float(j.lat) if j.lat else 0.0,
+            'lng': float(j.lng) if j.lng else 0.0
         } for j in journals])
     except Exception as e:
         logger.error(f"按國家查詢日誌失敗: {e}")

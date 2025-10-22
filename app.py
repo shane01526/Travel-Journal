@@ -22,7 +22,7 @@ supabase_password = os.environ.get('SUPABASE_DB_PASSWORD')
 # 如果沒有設定 DATABASE_URL，使用 Supabase 環境變數
 if supabase_password == os.environ.get('SUPABASE_DB_PASSWORD'):
     # 使用 IPv4 優先的連接方式（Render 相容）
-    database_url = f"postgresql://postgres:{os.environ.get('supabase_password')}@db.rtfdfsvqigdiadnffcxs.supabase.co:5432/postgres"
+    database_url = f"postgresql://postgres:[{os.environ.get('supabase_password')}]@db.rtfdfsvqigdiadnffcxs.supabase.co:5432/postgres"
 
 # 修正 Heroku PostgreSQL URL
 if database_url.startswith('postgres://'):

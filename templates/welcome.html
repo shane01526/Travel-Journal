@@ -7,6 +7,24 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200">
+    <!-- 上方導航欄（已登入時顯示） -->
+    {% if user %}
+    <nav class="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="text-xl font-light text-slate-700">旅行日誌</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-slate-600 text-sm hidden sm:inline">{{ user.name }}</span>
+                <a href="/logout" class="text-slate-500 hover:text-slate-700 text-sm transition-colors">登出</a>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
     <!-- 上半部：文藝宣傳區 -->
     <div class="min-h-[60vh] flex items-center justify-center px-4 py-12">
         <div class="max-w-4xl mx-auto text-center">
@@ -23,10 +41,16 @@
                 </div>
             </div>
 
-            <!-- 主標題 -->
+            <!-- 主標題（根據登入狀態顯示不同文字） -->
+            {% if user %}
+            <h1 class="text-5xl md:text-6xl font-light text-slate-700 mb-6 leading-tight">
+                歡迎回來，{{ user.name }}
+            </h1>
+            {% else %}
             <h1 class="text-5xl md:text-6xl font-light text-slate-700 mb-6 leading-tight">
                 旅行日誌
             </h1>
+            {% endif %}
             
             <!-- 文藝描述 -->
             <div class="space-y-4 mb-12">
@@ -48,4 +72,124 @@
                 <span class="px-4 py-2 bg-white/60 backdrop-blur-sm rounded-full text-sm text-slate-600 border border-slate-200">
                     ✍️ 圖文並茂
                 </span>
-                <span class="px-4 py-
+                <span class="px-4 py-2 bg-white/60 backdrop-blur-sm rounded-full text-sm text-slate-600 border border-slate-200">
+                    🌏 全球足跡
+                </span>
+                <span class="px-4 py-2 bg-white/60 backdrop-blur-sm rounded-full text-sm text-slate-600 border border-slate-200">
+                    💾 雲端儲存
+                </span>
+            </div>
+
+            <!-- 按鈕區域（根據登入狀態顯示不同按鈕） -->
+            <div class="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-md mx-auto">
+                {% if user %}
+                <!-- 已登入：直接進入日誌 -->
+                <a href="/dashboard" 
+                    class="w-full sm:w-auto px-8 py-4 bg-slate-500 hover:bg-slate-600 text-white rounded-xl transition-colors shadow-lg hover:shadow-xl text-lg font-medium">
+                    進入我的日誌
+                </a>
+                {% else %}
+                <!-- 未登入：顯示登入和註冊 -->
+                <a href="/login" 
+                    class="w-full sm:w-auto px-8 py-4 bg-slate-500 hover:bg-slate-600 text-white rounded-xl transition-colors shadow-lg hover:shadow-xl text-lg font-medium">
+                    登入
+                </a>
+                <a href="/register" 
+                    class="w-full sm:w-auto px-8 py-4 bg-white hover:bg-slate-50 text-slate-700 rounded-xl transition-colors border-2 border-slate-300 text-lg font-medium">
+                    註冊
+                </a>
+                {% endif %}
+            </div>
+
+            <!-- 快速登入提示（未登入時顯示） -->
+            {% if not user %}
+            <p class="mt-6 text-sm text-slate-500">
+                或使用 
+                <button onclick="quickGoogleLogin()" class="text-slate-700 underline hover:text-slate-900 cursor-pointer">
+                    Google 快速登入
+                </button>
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 下半部：功能介紹卡片 -->
+    <div class="max-w-6xl mx-auto px-4 pb-16">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- 功能卡片 1 -->
+            <div class="bg-white/60 backdrop-blur-sm rounded-2xl p-8 shadow-md hover:shadow-xl transition-shadow">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 mx-auto">
+                    <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-light text-slate-700 mb-2 text-center">記錄旅程</h3>
+                <p class="text-slate-600 text-sm text-center leading-relaxed">
+                    撰寫詳細的旅行日誌，記錄每個難忘的瞬間，讓回憶永存。
+                </p>
+            </div>
+
+            <!-- 功能卡片 2 -->
+            <div class="bg-white/60 backdrop-blur-sm rounded-2xl p-8 shadow-md hover:shadow-xl transition-shadow">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 mx-auto">
+                    <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-light text-slate-700 mb-2 text-center">地圖標記</h3>
+                <p class="text-slate-600 text-sm text-center leading-relaxed">
+                    在互動式地圖上標記每個去過的地方，視覺化你的旅行足跡。
+                </p>
+            </div>
+
+            <!-- 功能卡片 3 -->
+            <div class="bg-white/60 backdrop-blur-sm rounded-2xl p-8 shadow-md hover:shadow-xl transition-shadow">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 mx-auto">
+                    <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-light text-slate-700 mb-2 text-center">雲端同步</h3>
+                <p class="text-slate-600 text-sm text-center leading-relaxed">
+                    所有資料安全儲存在雲端，隨時隨地都能查看你的旅行記錄。
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 頁尾 -->
+    <footer class="bg-white/40 backdrop-blur-sm border-t border-slate-200 py-6">
+        <div class="max-w-6xl mx-auto px-4 text-center text-slate-500 text-sm">
+            <p>© 2025 旅行日誌 - 記錄每一段精彩的旅程</p>
+            <p class="mt-2">
+                <a href="https://github.com/shane01526/Travel-Journal" target="_blank" class="hover:text-slate-700 transition-colors">
+                    GitHub
+                </a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Google 快速登入功能
+        async function quickGoogleLogin() {
+            try {
+                const response = await fetch('/google-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    window.location.href = '/dashboard';
+                } else {
+                    alert('登入失敗，請稍後再試');
+                }
+            } catch (error) {
+                console.error('Google 登入錯誤:', error);
+                alert('登入失敗，請稍後再試');
+            }
+        }
+    </script>
+</body>
+</html>

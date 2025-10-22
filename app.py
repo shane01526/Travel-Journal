@@ -86,6 +86,7 @@ class Journal(db.Model):
     lng = db.Column(db.Float, default=0.0)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # 初始化資料庫
 def init_db():
@@ -114,10 +115,13 @@ def _get_request_data():
 # 路由
 @app.route('/')
 def index():
-    """首頁 - 顯示歡迎介面，已登入用戶不自動導向 dashboard"""
-    # 不自動導向，讓用戶可以看到歡迎介面
+    """首頁 - 顯示歡迎介面"""
     try:
-        return render_template('welcome.html')
+        # 如果已登入，取得用戶資訊
+        user = None
+        if 'user_id' in session:
+            user = User.query.get(session['user_id'])
+        return render_template('welcome.html', user=user)
     except Exception as e:
         logger.error(f"welcome.html 渲染失敗: {e}")
         return make_response("""
@@ -271,7 +275,6 @@ def add_journal():
         data = _get_request_data()
         resp, status = _create_journal_from_data(data)
         if status == 201:
-            # 成功後導向 dashboard 以便進行其他操作
             if request.is_json:
                 return jsonify({'success': True, 'redirect': url_for('dashboard')})
             flash('日誌新增成功！')
@@ -287,6 +290,25 @@ def add_journal():
     except Exception as e:
         logger.error(f"add_journal.html 渲染失敗: {e}")
         return "<h2>Add Journal</h2><p>Template error</p>", 200
+
+@app.route('/edit_journal/<int:journal_id>', methods=['GET'])
+def edit_journal(journal_id):
+    """編輯日誌頁面"""
+    if 'user_id' not in session:
+        flash('請先登入')
+        return redirect(url_for('login'))
+
+    journal = Journal.query.get_or_404(journal_id)
+    if journal.user_id != session['user_id']:
+        flash('無權限編輯此日誌')
+        return redirect(url_for('dashboard'))
+
+    try:
+        return render_template('edit_journal.html', journal=journal)
+    except Exception as e:
+        logger.error(f"edit_journal.html 渲染失敗: {e}")
+        flash('頁面載入失敗')
+        return redirect(url_for('dashboard'))
 
 def _create_journal_from_data(data):
     """從資料建立日誌"""
@@ -365,7 +387,7 @@ def journals_api():
         'lng': j.lng
     } for j in journals])
 
-@app.route('/api/journals/<int:journal_id>', methods=['GET', 'DELETE'])
+@app.route('/api/journals/<int:journal_id>', methods=['GET', 'PUT', 'DELETE'])
 def journal_detail(journal_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': '未登入'}), 401
@@ -384,6 +406,41 @@ def journal_detail(journal_id):
             db.session.rollback()
             logger.error(f"刪除日誌失敗: {e}")
             return jsonify({'success': False, 'message': '刪除失敗'}), 500
+    
+    elif request.method == 'PUT':
+        # 更新日誌
+        data = _get_request_data()
+        try:
+            journal.date = data.get('date', journal.date)
+            journal.location = data.get('location', journal.location)
+            journal.country = data.get('country', journal.country)
+            journal.content = data.get('content', journal.content)
+            
+            if 'lat' in data:
+                journal.lat = float(data.get('lat', 0))
+            if 'lng' in data:
+                journal.lng = float(data.get('lng', 0))
+            
+            journal.updated_at = datetime.utcnow()
+            db.session.commit()
+            logger.info(f"更新日誌成功: {journal_id}")
+            
+            return jsonify({
+                'success': True,
+                'journal': {
+                    'id': journal.id,
+                    'date': journal.date,
+                    'location': journal.location,
+                    'country': journal.country,
+                    'content': journal.content,
+                    'lat': journal.lat,
+                    'lng': journal.lng
+                }
+            })
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"更新日誌失敗: {e}")
+            return jsonify({'success': False, 'message': '更新失敗'}), 500
     
     # GET 請求
     return jsonify({
@@ -444,11 +501,9 @@ def server_error(e):
 
 # 初始化資料庫
 if __name__ != '__main__':
-    # 在 gunicorn 啟動時初始化
     init_db()
 
 if __name__ == '__main__':
-    # 本地開發模式
     init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

@@ -1,7 +1,9 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import os
+import secrets
 import logging
 from dotenv import load_dotenv
 
@@ -13,25 +15,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
 
-# 資料庫配置 - 使用 dotenv
+# 資料庫配置
 def get_database_url():
     """取得並驗證資料庫 URL"""
     database_url = os.environ.get('DATABASE_URL')
     
     if not database_url:
-        logger.warning("DATABASE_URL 未設定,嘗試使用分開的變數")
-        # 嘗試使用分開的變數組合
-        user = os.environ.get('DB_USER')
-        password = os.environ.get('DB_PASSWORD')
-        host = os.environ.get('DB_HOST')
-        port = os.environ.get('DB_PORT', '5432')
-        dbname = os.environ.get('DB_NAME', 'postgres')
-        
-        if all([user, password, host]):
-            database_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
-            logger.info("使用組合的資料庫連線字串")
+        logger.warning("DATABASE_URL 未設定，嘗試使用 Supabase 密碼")
+        # 嘗試使用 Supabase 密碼
+        password = os.environ.get('SUPABASE_DB_PASSWORD')
+        if password:
+            database_url = f"postgresql://postgres:{password}@db.rtfdfsvqigdiadnffcxs.supabase.co:5432/postgres"
+            logger.info("使用 Supabase 資料庫")
         else:
             logger.error("資料庫連線資訊不完整")
             return None
@@ -64,29 +61,36 @@ if database_url:
         'max_overflow': 10
     }
 else:
-    logger.warning("未設定資料庫,使用 SQLite")
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///todo.db'
+    logger.warning("未設定資料庫，使用 SQLite")
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///travel_journal.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# 資料模型
-class Todo(db.Model):
-    __tablename__ = 'todos'
+# 資料庫模型
+class User(db.Model):
+    __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    completed = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    is_google = db.Column(db.Boolean, default=False)
+    journals = db.relationship('Journal', backref='author', lazy=True, cascade='all, delete-orphan')
+
+class Journal(db.Model):
+    __tablename__ = 'journals'
     
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'title': self.title,
-            'completed': self.completed,
-            'created_at': self.created_at.isoformat()
-        }
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.String(20), nullable=False)
+    location = db.Column(db.String(200), nullable=False)
+    country = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    lat = db.Column(db.Float, default=0.0)
+    lng = db.Column(db.Float, default=0.0)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # 初始化資料庫
 def init_db():
@@ -107,77 +111,163 @@ def init_db():
 # 路由
 @app.route('/')
 def index():
-    """首頁"""
-    try:
-        todos = Todo.query.order_by(Todo.created_at.desc()).all()
-        return render_template('index.html', todos=todos)
-    except Exception as e:
-        logger.error(f"取得待辦事項失敗: {e}")
-        return render_template('index.html', todos=[], error=str(e))
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+    return render_template('welcome.html')
 
-@app.route('/api/todos', methods=['GET'])
-def get_todos():
-    """取得所有待辦事項"""
-    try:
-        todos = Todo.query.order_by(Todo.created_at.desc()).all()
-        return jsonify([todo.to_dict() for todo in todos])
-    except Exception as e:
-        logger.error(f"API 取得待辦事項失敗: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/todos', methods=['POST'])
-def create_todo():
-    """新增待辦事項"""
-    try:
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
         data = request.get_json()
-        if not data or 'title' not in data:
-            return jsonify({'error': '標題不能為空'}), 400
+        email = data.get('email')
+        password = data.get('password')
         
-        todo = Todo(title=data['title'])
-        db.session.add(todo)
-        db.session.commit()
-        
-        logger.info(f"新增待辦事項: {todo.title}")
-        return jsonify(todo.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"新增待辦事項失敗: {e}")
-        return jsonify({'error': str(e)}), 500
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            session['user_name'] = user.name
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'message': '帳號或密碼錯誤'})
+    
+    return render_template('login.html')
 
-@app.route('/api/todos/<int:todo_id>', methods=['PUT'])
-def update_todo(todo_id):
-    """更新待辦事項"""
-    try:
-        todo = Todo.query.get_or_404(todo_id)
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
         data = request.get_json()
+        name = data.get('name')
+        email = data.get('email')
+        password = data.get('password')
         
-        if 'title' in data:
-            todo.title = data['title']
-        if 'completed' in data:
-            todo.completed = data['completed']
+        if User.query.filter_by(email=email).first():
+            return jsonify({'success': False, 'message': '此帳號已存在'})
         
+        hashed_password = generate_password_hash(password)
+        new_user = User(name=name, email=email, password=hashed_password)
+        db.session.add(new_user)
         db.session.commit()
-        logger.info(f"更新待辦事項: {todo.id}")
-        return jsonify(todo.to_dict())
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"更新待辦事項失敗: {e}")
-        return jsonify({'error': str(e)}), 500
+        
+        session['user_id'] = new_user.id
+        session['user_name'] = new_user.name
+        return jsonify({'success': True})
+    
+    return render_template('register.html')
 
-@app.route('/api/todos/<int:todo_id>', methods=['DELETE'])
-def delete_todo(todo_id):
-    """刪除待辦事項"""
+@app.route('/google-login', methods=['POST'])
+def google_login():
+    user_name = f'訪客使用者_{datetime.now().strftime("%Y%m%d%H%M%S")}'
+    email = f'google_{datetime.now().timestamp()}@gmail.com'
+    password = generate_password_hash(secrets.token_hex(16))
+    
+    new_user = User(name=user_name, email=email, password=password, is_google=True)
+    db.session.add(new_user)
+    db.session.commit()
+    
+    session['user_id'] = new_user.id
+    session['user_name'] = new_user.name
+    return jsonify({'success': True})
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
+@app.route('/dashboard')
+def dashboard():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user = User.query.get(session['user_id'])
+    if not user:
+        session.clear()
+        return redirect(url_for('login'))
+    
+    journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
+    
+    countries = list(set([j.country for j in journals]))
+    
+    return render_template('dashboard.html', 
+                         user=user, 
+                         journals=journals, 
+                         countries=countries,
+                         journal_count=len(journals),
+                         country_count=len(countries))
+
+@app.route('/add_journal')
+def add_journal():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('add_journal.html')
+
+@app.route('/api/journals', methods=['GET', 'POST'])
+def journals_api():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '未登入'}), 401
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            new_journal = Journal(
+                date=data['date'],
+                location=data['location'],
+                country=data['country'],
+                content=data['content'],
+                lat=data.get('lat', 0.0),
+                lng=data.get('lng', 0.0),
+                user_id=session['user_id']
+            )
+            db.session.add(new_journal)
+            db.session.commit()
+            logger.info(f"新增日誌成功: {new_journal.id}")
+            return jsonify({'success': True, 'id': new_journal.id})
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"新增日誌失敗: {e}")
+            return jsonify({'success': False, 'message': str(e)}), 500
+    
+    journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.created_at.desc()).all()
+    return jsonify([{
+        'id': j.id,
+        'date': j.date,
+        'location': j.location,
+        'country': j.country,
+        'content': j.content,
+        'lat': j.lat,
+        'lng': j.lng
+    } for j in journals])
+
+@app.route('/api/journals/<int:journal_id>', methods=['DELETE'])
+def delete_journal(journal_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '未登入'}), 401
+    
     try:
-        todo = Todo.query.get_or_404(todo_id)
-        db.session.delete(todo)
-        db.session.commit()
+        journal = Journal.query.get_or_404(journal_id)
+        if journal.user_id != session['user_id']:
+            return jsonify({'success': False, 'message': '無權限'}), 403
         
-        logger.info(f"刪除待辦事項: {todo_id}")
-        return jsonify({'message': '刪除成功'})
+        db.session.delete(journal)
+        db.session.commit()
+        logger.info(f"刪除日誌成功: {journal_id}")
+        return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        logger.error(f"刪除待辦事項失敗: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"刪除日誌失敗: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/journals/country/<country>')
+def journals_by_country(country):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '未登入'}), 401
+    
+    journals = Journal.query.filter_by(user_id=session['user_id'], country=country).all()
+    return jsonify([{
+        'id': j.id,
+        'date': j.date,
+        'location': j.location,
+        'country': j.country,
+        'content': j.content
+    } for j in journals])
 
 @app.route('/health')
 def health_check():
@@ -194,6 +284,14 @@ def health_check():
         'status': 'ok' if db_status == 'healthy' else 'degraded',
         'database': db_status
     })
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
 
 # 初始化資料庫
 if __name__ != '__main__':

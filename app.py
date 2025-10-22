@@ -1,121 +1,75 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, make_response
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
-import os
-import secrets
-import logging
-import traceback
-from dotenv import load_dotenv
+@app.route('/add_journal', methods=['GET', 'POST'])
+def add_journal():
+    """新增日志页面"""
+    if 'user_id' not in session:
+        flash('請先登入')
+        return redirect(url_for('login'))
 
-# 載入環境變數
-load_dotenv()
-
-# 設定日誌
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
-
-# 資料庫配置函數
-def get_database_url():
-    """取得並驗證資料庫 URL"""
-    database_url = os.environ.get('DATABASE_URL')
-    
-    if not database_url:
-        logger.warning("DATABASE_URL 未設定，嘗試使用 Supabase 密碼")
-        password = os.environ.get('SUPABASE_DB_PASSWORD')
-        if password:
-            database_url = f"postgresql://postgres:{password}@db.rtfdfsvqigdiadnffcxs.supabase.co:5432/postgres"
-            logger.info("使用 Supabase 資料庫")
+    if request.method == 'POST':
+        data = _get_request_data()
+        resp, status = _create_journal_from_data(data)
+        
+        if status == 201:
+            # API 请求：返回 JSON 并告知前端要导向 dashboard
+            if request.is_json:
+                return jsonify({
+                    'success': True, 
+                    'message': '日誌新增成功',
+                    'redirect': url_for('dashboard')
+                }), 201
+            
+            # 表单提交：直接导向 dashboard
+            flash('日誌新增成功！')
+            return redirect(url_for('dashboard'))
         else:
-            logger.warning("資料庫連線資訊不完整，使用 SQLite")
-            return 'sqlite:///travel_journal.db'
-    
-    # 修正 Heroku PostgreSQL URL
-    if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    
-    # 顯示安全的連接訊息
-    if '@' in database_url:
-        safe_url = '***@' + database_url.split('@')[-1]
-    else:
-        safe_url = database_url
-    logger.info(f"使用資料庫: {safe_url}")
-    
-    return database_url
+            # 失败情况
+            if request.is_json:
+                return jsonify(resp), status
+            flash(resp.get('message', '新增失敗'))
+            return redirect(url_for('add_journal'))
 
-# 設定資料庫
-database_url = get_database_url()
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,
-    'pool_recycle': 300,
-    'pool_size': 5,
-    'max_overflow': 10,
-    'connect_args': {
-        'connect_timeout': 10,
-        'options': '-c statement_timeout=30000'
-    } if 'postgresql' in database_url else {}
-}
-
-db = SQLAlchemy(app)
-
-# 資料模型
-class User(db.Model):
-    __tablename__ = 'users'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    is_google = db.Column(db.Boolean, default=False)
-    journals = db.relationship('Journal', backref='author', lazy=True, cascade='all, delete-orphan')
-
-class Journal(db.Model):
-    __tablename__ = 'journals'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.String(20), nullable=False)
-    location = db.Column(db.String(200), nullable=False)
-    country = db.Column(db.String(100), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    lat = db.Column(db.Float, default=0.0)
-    lng = db.Column(db.Float, default=0.0)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# 初始化資料庫
-def init_db():
-    """初始化資料庫"""
+    # GET 请求：显示新增日志页面
     try:
-        with app.app_context():
-            db.engine.connect()
-            logger.info("✅ 資料庫連線成功")
-            db.create_all()
-            logger.info("✅ 資料表建立/檢查完成")
-            return True
+        return render_template('add_journal.html')
     except Exception as e:
-        logger.error(f"❌ 資料庫初始化失敗: {e}\n{traceback.format_exc()}")
-        return False
+        logger.error(f"add_journal.html 渲染失敗: {e}")
+        return "<h2>Add Journal</h2><p>Template error</p>", 200
 
-# 輔助函數
-def _get_request_data():
-    """取得請求資料 (JSON 或表單)"""
-    if request.is_json:
-        try:
-            return request.get_json() or {}
-        except Exception:
-            return {}
-    return request.form.to_dict()
 
-# 路由
+@app.route('/dashboard')
+def dashboard():
+    """主控台 - 需要登入才能访问"""
+    if 'user_id' not in session:
+        flash('請先登入才能查看日誌')
+        return redirect(url_for('login'))
+
+    user = User.query.get(session['user_id'])
+    if not user:
+        session.clear()
+        flash('用戶不存在，請重新登入')
+        return redirect(url_for('login'))
+
+    # 获取用户的所有日志
+    journals = Journal.query.filter_by(user_id=user.id)\
+                             .order_by(Journal.created_at.desc())\
+                             .all()
+    
+    # 统计国家数量
+    countries = list({j.country for j in journals})
+    
+    return render_template('dashboard.html',
+                           user=user,
+                           journals=journals,
+                           countries=countries,
+                           journal_count=len(journals),
+                           country_count=len(countries))
+
+
 @app.route('/')
 def index():
-    """首頁 - 顯示歡迎介面，已登入用戶不自動導向 dashboard"""
-    # 不自動導向，讓用戶可以看到歡迎介面
+    """首页 - 显示欢迎介面"""
+    # 不自动导向，让用户可以看到欢迎介面
+    # 已登入用户可以选择进入 dashboard 或登出
     try:
         return render_template('welcome.html')
     except Exception as e:
@@ -130,325 +84,3 @@ def index():
           </body>
         </html>
         """, 200)
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        data = _get_request_data()
-        email = (data.get('email') or '').strip()
-        password = data.get('password') or ''
-
-        if not email or not password:
-            if request.is_json:
-                return jsonify({'success': False, 'message': '請提供 email 與 password'}), 400
-            flash('請提供 email 與 password')
-            return redirect(url_for('login'))
-
-        user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password, password):
-            session['user_id'] = user.id
-            session['user_name'] = user.name
-            if request.is_json:
-                return jsonify({'success': True})
-            flash('登入成功')
-            return redirect(url_for('dashboard'))
-        
-        if request.is_json:
-            return jsonify({'success': False, 'message': '帳號或密碼錯誤'}), 401
-        flash('帳號或密碼錯誤')
-        return redirect(url_for('login'))
-
-    try:
-        return render_template('login.html')
-    except Exception as e:
-        logger.error(f"login.html 渲染失敗: {e}")
-        return "<h2>Login</h2><p>Template error</p>", 200
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        data = _get_request_data()
-        name = (data.get('name') or '').strip()
-        email = (data.get('email') or '').strip()
-        password = data.get('password') or ''
-
-        if not name or not email or not password:
-            if request.is_json:
-                return jsonify({'success': False, 'message': 'name, email, password 三者皆為必填'}), 400
-            flash('name, email, password 三者皆為必填')
-            return redirect(url_for('register'))
-
-        if User.query.filter_by(email=email).first():
-            if request.is_json:
-                return jsonify({'success': False, 'message': '此帳號已存在'}), 409
-            flash('此帳號已存在')
-            return redirect(url_for('register'))
-
-        hashed_password = generate_password_hash(password)
-        new_user = User(name=name, email=email, password=hashed_password)
-        try:
-            db.session.add(new_user)
-            db.session.commit()
-            logger.info(f"新用戶註冊: {email}")
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"註冊失敗: {e}\n{traceback.format_exc()}")
-            if request.is_json:
-                return jsonify({'success': False, 'message': '資料庫錯誤，註冊失敗'}), 500
-            flash('資料庫錯誤，註冊失敗')
-            return redirect(url_for('register'))
-
-        session['user_id'] = new_user.id
-        session['user_name'] = new_user.name
-
-        if request.is_json:
-            return jsonify({'success': True})
-        flash('註冊成功')
-        return redirect(url_for('dashboard'))
-
-    try:
-        return render_template('register.html')
-    except Exception as e:
-        logger.error(f"register.html 渲染失敗: {e}")
-        return "<h2>Register</h2><p>Template error</p>", 200
-
-@app.route('/google-login', methods=['POST'])
-def google_login():
-    user_name = f'訪客使用者_{datetime.now().strftime("%Y%m%d%H%M%S")}'
-    email = f'google_{datetime.now().timestamp()}@gmail.com'
-    password = generate_password_hash(secrets.token_hex(16))
-
-    new_user = User(name=user_name, email=email, password=password, is_google=True)
-    try:
-        db.session.add(new_user)
-        db.session.commit()
-        logger.info(f"Google 登入成功: {email}")
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Google 登入失敗: {e}")
-        return jsonify({'success': False, 'message': '註冊訪客失敗'}), 500
-
-    session['user_id'] = new_user.id
-    session['user_name'] = new_user.name
-    return jsonify({'success': True})
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    flash('已成功登出')
-    return redirect(url_for('index'))
-
-@app.route('/dashboard')
-def dashboard():
-    """主控台 - 需要登入才能訪問"""
-    if 'user_id' not in session:
-        flash('請先登入才能查看日誌')
-        return redirect(url_for('login'))
-
-    user = User.query.get(session['user_id'])
-    if not user:
-        session.clear()
-        flash('用戶不存在，請重新登入')
-        return redirect(url_for('login'))
-
-    journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
-    countries = list({j.country for j in journals})
-    
-    return render_template('dashboard.html',
-                           user=user,
-                           journals=journals,
-                           countries=countries,
-                           journal_count=len(journals),
-                           country_count=len(countries))
-
-@app.route('/add_journal', methods=['GET', 'POST'])
-def add_journal():
-    if 'user_id' not in session:
-        flash('請先登入')
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        data = _get_request_data()
-        resp, status = _create_journal_from_data(data)
-        if status == 201:
-            # 成功後導向 dashboard 以便進行其他操作
-            if request.is_json:
-                return jsonify({'success': True, 'redirect': url_for('dashboard')})
-            flash('日誌新增成功！')
-            return redirect(url_for('dashboard'))
-        else:
-            if request.is_json:
-                return jsonify(resp), status
-            flash(resp.get('message', '新增失敗'))
-            return redirect(url_for('add_journal'))
-
-    try:
-        return render_template('add_journal.html')
-    except Exception as e:
-        logger.error(f"add_journal.html 渲染失敗: {e}")
-        return "<h2>Add Journal</h2><p>Template error</p>", 200
-
-def _create_journal_from_data(data):
-    """從資料建立日誌"""
-    if 'user_id' not in session:
-        return ({'success': False, 'message': '未登入'}, 401)
-
-    date = (data.get('date') or '').strip()
-    location = (data.get('location') or '').strip()
-    country = (data.get('country') or '').strip()
-    content = (data.get('content') or '').strip()
-
-    logger.info(f"建立日誌: date={date}, location={location}, country={country}")
-
-    if not location or not country or not content:
-        return ({'success': False, 'message': 'location, country, content 為必填'}, 400)
-
-    if not date:
-        date = datetime.utcnow().strftime('%Y-%m-%d')
-
-    lat = 0.0
-    lng = 0.0
-    try:
-        if 'lat' in data and data.get('lat') not in (None, ''):
-            lat = float(data.get('lat'))
-        if 'lng' in data and data.get('lng') not in (None, ''):
-            lng = float(data.get('lng'))
-    except ValueError as e:
-        logger.error(f"座標轉換錯誤: {e}")
-        return ({'success': False, 'message': 'lat/lng 需為數值'}, 400)
-
-    try:
-        new_journal = Journal(
-            date=date,
-            location=location,
-            country=country,
-            content=content,
-            lat=lat,
-            lng=lng,
-            user_id=session['user_id']
-        )
-        db.session.add(new_journal)
-        db.session.commit()
-        logger.info(f"日誌建立成功: ID={new_journal.id}")
-        return ({'success': True, 'id': new_journal.id, 'journal': {
-            'id': new_journal.id,
-            'date': new_journal.date,
-            'location': new_journal.location,
-            'country': new_journal.country,
-            'content': new_journal.content,
-            'lat': new_journal.lat,
-            'lng': new_journal.lng
-        }}, 201)
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"建立日誌失敗: {e}\n{traceback.format_exc()}")
-        return ({'success': False, 'message': f'資料庫錯誤: {str(e)}'}, 500)
-
-@app.route('/api/journals', methods=['GET', 'POST'])
-def journals_api():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': '未登入'}), 401
-
-    if request.method == 'POST':
-        data = _get_request_data()
-        resp, status = _create_journal_from_data(data)
-        return jsonify(resp), status
-
-    journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.created_at.desc()).all()
-    return jsonify([{
-        'id': j.id,
-        'date': j.date,
-        'location': j.location,
-        'country': j.country,
-        'content': j.content,
-        'lat': j.lat,
-        'lng': j.lng
-    } for j in journals])
-
-@app.route('/api/journals/<int:journal_id>', methods=['GET', 'DELETE'])
-def journal_detail(journal_id):
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': '未登入'}), 401
-
-    journal = Journal.query.get_or_404(journal_id)
-    if journal.user_id != session['user_id']:
-        return jsonify({'success': False, 'message': '無權限'}), 403
-
-    if request.method == 'DELETE':
-        try:
-            db.session.delete(journal)
-            db.session.commit()
-            logger.info(f"刪除日誌成功: {journal_id}")
-            return jsonify({'success': True})
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"刪除日誌失敗: {e}")
-            return jsonify({'success': False, 'message': '刪除失敗'}), 500
-    
-    # GET 請求
-    return jsonify({
-        'id': journal.id,
-        'date': journal.date,
-        'location': journal.location,
-        'country': journal.country,
-        'content': journal.content,
-        'lat': journal.lat,
-        'lng': journal.lng
-    })
-
-@app.route('/api/journals/country/<country>')
-def journals_by_country(country):
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': '未登入'}), 401
-
-    journals = Journal.query.filter_by(user_id=session['user_id'], country=country).all()
-    return jsonify([{
-        'id': j.id,
-        'date': j.date,
-        'location': j.location,
-        'country': j.country,
-        'content': j.content,
-        'lat': j.lat,
-        'lng': j.lng
-    } for j in journals])
-
-@app.route('/health')
-def health_check():
-    """健康檢查端點"""
-    try:
-        db.session.execute(db.text('SELECT 1'))
-        db_status = 'healthy'
-    except Exception as e:
-        db_status = f'unhealthy: {str(e)}'
-        logger.error(f"健康檢查失敗: {e}")
-    
-    return jsonify({
-        'status': 'ok' if db_status == 'healthy' else 'degraded',
-        'database': db_status
-    })
-
-@app.errorhandler(404)
-def not_found(e):
-    try:
-        return render_template('404.html'), 404
-    except:
-        return "404 Not Found", 404
-
-@app.errorhandler(500)
-def server_error(e):
-    logger.error(f"Internal server error: {e}\n{traceback.format_exc()}")
-    try:
-        return render_template('500.html'), 500
-    except:
-        return "500 Internal Server Error", 500
-
-# 初始化資料庫
-if __name__ != '__main__':
-    # 在 gunicorn 啟動時初始化
-    init_db()
-
-if __name__ == '__main__':
-    # 本地開發模式
-    init_db()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)

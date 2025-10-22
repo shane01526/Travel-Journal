@@ -240,8 +240,9 @@ def logout():
 
 @app.route('/dashboard')
 def dashboard():
+    """主控台 - 需要登入才能訪問"""
     if 'user_id' not in session:
-        flash('請先登入')
+        flash('請先登入才能查看日誌')
         return redirect(url_for('login'))
 
     user = User.query.get(session['user_id'])
@@ -270,9 +271,14 @@ def add_journal():
         data = _get_request_data()
         resp, status = _create_journal_from_data(data)
         if status == 201:
-            flash('日誌新增成功')
+            # 成功後導向 dashboard 以便進行其他操作
+            if request.is_json:
+                return jsonify({'success': True, 'redirect': url_for('dashboard')})
+            flash('日誌新增成功！')
             return redirect(url_for('dashboard'))
         else:
+            if request.is_json:
+                return jsonify(resp), status
             flash(resp.get('message', '新增失敗'))
             return redirect(url_for('add_journal'))
 

@@ -21,7 +21,7 @@ database_url = os.environ.get('DATABASE_URL', 'sqlite:///travel_journal.db')
 # 如果沒有設定 DATABASE_URL，使用 Supabase 環境變數
 if database_url == 'sqlite:///travel_journal.db' and os.environ.get('SUPABASE_DB_PASSWORD'):
     # 使用 IPv4 優先的連接方式（Render 相容）
-    database_url = f"postgresql://postgres:{os.environ.get('SUPABASE_DB_PASSWORD')}@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
+    database_url = f"postgresql://postgres:{os.environ.get('SUPABASE_DB_PASSWORD')}@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
 
 # 修正 Heroku PostgreSQL URL
 if database_url.startswith('postgres://'):

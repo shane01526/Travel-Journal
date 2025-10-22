@@ -114,8 +114,8 @@ def _get_request_data():
 # 路由
 @app.route('/')
 def index():
-    if 'user_id' in session:
-        return redirect(url_for('dashboard'))
+    """首頁 - 顯示歡迎介面，已登入用戶不自動導向 dashboard"""
+    # 不自動導向，讓用戶可以看到歡迎介面
     try:
         return render_template('welcome.html')
     except Exception as e:

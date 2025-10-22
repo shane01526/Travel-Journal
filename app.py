@@ -3,6 +3,10 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
 import logging
+from dotenv import load_dotenv
+
+# 載入 .env 檔案
+load_dotenv()
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO)
@@ -11,20 +15,35 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
-# 資料庫配置 - 修正版
+# 資料庫配置 - 使用 dotenv
 def get_database_url():
     """取得並驗證資料庫 URL"""
     database_url = os.environ.get('DATABASE_URL')
     
     if not database_url:
-        logger.error("DATABASE_URL 環境變數未設定")
-        return None
+        logger.warning("DATABASE_URL 未設定,嘗試使用分開的變數")
+        # 嘗試使用分開的變數組合
+        user = os.environ.get('DB_USER')
+        password = os.environ.get('DB_PASSWORD')
+        host = os.environ.get('DB_HOST')
+        port = os.environ.get('DB_PORT', '5432')
+        dbname = os.environ.get('DB_NAME', 'postgres')
+        
+        if all([user, password, host]):
+            database_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+            logger.info("使用組合的資料庫連線字串")
+        else:
+            logger.error("資料庫連線資訊不完整")
+            return None
     
     # 移除密碼後顯示 (用於日誌)
-    safe_url = database_url.split('@')[-1] if '@' in database_url else database_url
-    logger.info(f"使用資料庫: ***@{safe_url}")
+    if '@' in database_url:
+        safe_url = '***@' + database_url.split('@')[-1]
+    else:
+        safe_url = database_url
+    logger.info(f"使用資料庫: {safe_url}")
     
-    # 強制使用 IPv4 - 添加 connect_args
+    # 確保使用 postgresql:// 前綴
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     
@@ -41,6 +60,8 @@ if database_url:
         },
         'pool_pre_ping': True,
         'pool_recycle': 300,
+        'pool_size': 5,
+        'max_overflow': 10
     }
 else:
     logger.warning("未設定資料庫,使用 SQLite")
@@ -73,14 +94,14 @@ def init_db():
         with app.app_context():
             # 測試連線
             db.engine.connect()
-            logger.info("資料庫連線成功")
+            logger.info("✅ 資料庫連線成功")
             
             # 建立資料表
             db.create_all()
-            logger.info("資料表建立/檢查完成")
+            logger.info("✅ 資料表建立/檢查完成")
             return True
     except Exception as e:
-        logger.error(f"資料庫初始化失敗: {e}")
+        logger.error(f"❌ 資料庫初始化失敗: {e}")
         return False
 
 # 路由

@@ -9,14 +9,22 @@
 </head>
 <body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200 flex items-center justify-center p-4">
     <div class="text-center">
-        <h1 class="text-9xl font-light text-slate-300 mb-4">404</h1>
-        <p class="text-2xl text-slate-600 mb-8">找不到頁面</p>
-        <a href="/" class="inline-block bg-slate-500 hover:bg-slate-600 text-white px-8 py-3 rounded-xl transition-colors">
+        <div class="mb-8">
+            <svg class="w-32 h-32 mx-auto text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+        </div>
+        <h1 class="text-8xl font-light text-slate-400 mb-4">404</h1>
+        <p class="text-2xl text-slate-600 mb-2">找不到頁面</p>
+        <p class="text-slate-500 mb-8">抱歉，你要找的頁面似乎不存在</p>
+        <a href="/" class="inline-block bg-slate-500 hover:bg-slate-600 text-white px-8 py-3 rounded-xl transition-colors shadow-md">
             返回首頁
         </a>
     </div>
 </body>
 </html>
+
+<!-- ==================== 分隔線 ==================== -->
 
 <!-- templates/500.html -->
 <!DOCTYPE html>
@@ -29,11 +37,22 @@
 </head>
 <body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200 flex items-center justify-center p-4">
     <div class="text-center">
-        <h1 class="text-9xl font-light text-slate-300 mb-4">500</h1>
-        <p class="text-2xl text-slate-600 mb-8">伺服器錯誤</p>
-        <a href="/" class="inline-block bg-slate-500 hover:bg-slate-600 text-white px-8 py-3 rounded-xl transition-colors">
-            返回首頁
-        </a>
+        <div class="mb-8">
+            <svg class="w-32 h-32 mx-auto text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+        </div>
+        <h1 class="text-8xl font-light text-slate-400 mb-4">500</h1>
+        <p class="text-2xl text-slate-600 mb-2">伺服器錯誤</p>
+        <p class="text-slate-500 mb-8">抱歉，伺服器發生了一些問題</p>
+        <div class="space-y-3">
+            <a href="/" class="block bg-slate-500 hover:bg-slate-600 text-white px-8 py-3 rounded-xl transition-colors shadow-md">
+                返回首頁
+            </a>
+            <button onclick="location.reload()" class="block w-full bg-white border-2 border-slate-300 hover:bg-slate-50 text-slate-700 px-8 py-3 rounded-xl transition-colors">
+                重新整理
+            </button>
+        </div>
     </div>
 </body>
 </html>

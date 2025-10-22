@@ -121,9 +121,13 @@ def index():
         user = None
         if 'user_id' in session:
             user = User.query.get(session['user_id'])
+            # 如果用戶不存在，清除 session
+            if not user:
+                session.clear()
+        
         return render_template('welcome.html', user=user)
     except Exception as e:
-        logger.error(f"welcome.html 渲染失敗: {e}")
+        logger.error(f"welcome.html 渲染失敗: {e}\n{traceback.format_exc()}")
         return make_response("""
         <!doctype html>
         <html>
@@ -148,19 +152,28 @@ def login():
             flash('請提供 email 與 password')
             return redirect(url_for('login'))
 
-        user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password, password):
-            session['user_id'] = user.id
-            session['user_name'] = user.name
+        try:
+            user = User.query.filter_by(email=email).first()
+            if user and check_password_hash(user.password, password):
+                session['user_id'] = user.id
+                session['user_name'] = user.name
+                logger.info(f"用戶登入成功: {email}")
+                
+                if request.is_json:
+                    return jsonify({'success': True})
+                flash('登入成功')
+                return redirect(url_for('dashboard'))
+            
             if request.is_json:
-                return jsonify({'success': True})
-            flash('登入成功')
-            return redirect(url_for('dashboard'))
-        
-        if request.is_json:
-            return jsonify({'success': False, 'message': '帳號或密碼錯誤'}), 401
-        flash('帳號或密碼錯誤')
-        return redirect(url_for('login'))
+                return jsonify({'success': False, 'message': '帳號或密碼錯誤'}), 401
+            flash('帳號或密碼錯誤')
+            return redirect(url_for('login'))
+        except Exception as e:
+            logger.error(f"登入錯誤: {e}\n{traceback.format_exc()}")
+            if request.is_json:
+                return jsonify({'success': False, 'message': '登入失敗，請稍後再試'}), 500
+            flash('登入失敗，請稍後再試')
+            return redirect(url_for('login'))
 
     try:
         return render_template('login.html')
@@ -182,18 +195,27 @@ def register():
             flash('name, email, password 三者皆為必填')
             return redirect(url_for('register'))
 
-        if User.query.filter_by(email=email).first():
-            if request.is_json:
-                return jsonify({'success': False, 'message': '此帳號已存在'}), 409
-            flash('此帳號已存在')
-            return redirect(url_for('register'))
-
-        hashed_password = generate_password_hash(password)
-        new_user = User(name=name, email=email, password=hashed_password)
         try:
+            if User.query.filter_by(email=email).first():
+                if request.is_json:
+                    return jsonify({'success': False, 'message': '此帳號已存在'}), 409
+                flash('此帳號已存在')
+                return redirect(url_for('register'))
+
+            hashed_password = generate_password_hash(password)
+            new_user = User(name=name, email=email, password=hashed_password)
+            
             db.session.add(new_user)
             db.session.commit()
             logger.info(f"新用戶註冊: {email}")
+            
+            session['user_id'] = new_user.id
+            session['user_name'] = new_user.name
+
+            if request.is_json:
+                return jsonify({'success': True})
+            flash('註冊成功')
+            return redirect(url_for('dashboard'))
         except Exception as e:
             db.session.rollback()
             logger.error(f"註冊失敗: {e}\n{traceback.format_exc()}")
@@ -201,14 +223,6 @@ def register():
                 return jsonify({'success': False, 'message': '資料庫錯誤，註冊失敗'}), 500
             flash('資料庫錯誤，註冊失敗')
             return redirect(url_for('register'))
-
-        session['user_id'] = new_user.id
-        session['user_name'] = new_user.name
-
-        if request.is_json:
-            return jsonify({'success': True})
-        flash('註冊成功')
-        return redirect(url_for('dashboard'))
 
     try:
         return render_template('register.html')
@@ -218,23 +232,24 @@ def register():
 
 @app.route('/google-login', methods=['POST'])
 def google_login():
-    user_name = f'訪客使用者_{datetime.now().strftime("%Y%m%d%H%M%S")}'
-    email = f'google_{datetime.now().timestamp()}@gmail.com'
-    password = generate_password_hash(secrets.token_hex(16))
-
-    new_user = User(name=user_name, email=email, password=password, is_google=True)
     try:
+        user_name = f'訪客使用者_{datetime.now().strftime("%Y%m%d%H%M%S")}'
+        email = f'google_{datetime.now().timestamp()}@gmail.com'
+        password = generate_password_hash(secrets.token_hex(16))
+
+        new_user = User(name=user_name, email=email, password=password, is_google=True)
+        
         db.session.add(new_user)
         db.session.commit()
         logger.info(f"Google 登入成功: {email}")
+        
+        session['user_id'] = new_user.id
+        session['user_name'] = new_user.name
+        return jsonify({'success': True})
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Google 登入失敗: {e}")
+        logger.error(f"Google 登入失敗: {e}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'message': '註冊訪客失敗'}), 500
-
-    session['user_id'] = new_user.id
-    session['user_name'] = new_user.name
-    return jsonify({'success': True})
 
 @app.route('/logout')
 def logout():
@@ -249,21 +264,28 @@ def dashboard():
         flash('請先登入才能查看日誌')
         return redirect(url_for('login'))
 
-    user = User.query.get(session['user_id'])
-    if not user:
-        session.clear()
-        flash('用戶不存在，請重新登入')
-        return redirect(url_for('login'))
+    try:
+        user = User.query.get(session['user_id'])
+        if not user:
+            session.clear()
+            flash('用戶不存在，請重新登入')
+            return redirect(url_for('login'))
 
-    journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
-    countries = list({j.country for j in journals})
-    
-    return render_template('dashboard.html',
-                           user=user,
-                           journals=journals,
-                           countries=countries,
-                           journal_count=len(journals),
-                           country_count=len(countries))
+        journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
+        countries = list({j.country for j in journals})
+        
+        logger.info(f"用戶 {user.name} 查看 dashboard，共有 {len(journals)} 篇日誌")
+        
+        return render_template('dashboard.html',
+                               user=user,
+                               journals=journals,
+                               countries=countries,
+                               journal_count=len(journals),
+                               country_count=len(countries))
+    except Exception as e:
+        logger.error(f"Dashboard 錯誤: {e}\n{traceback.format_exc()}")
+        flash('載入日誌失敗，請稍後再試')
+        return redirect(url_for('index'))
 
 @app.route('/add_journal', methods=['GET', 'POST'])
 def add_journal():
@@ -298,15 +320,15 @@ def edit_journal(journal_id):
         flash('請先登入')
         return redirect(url_for('login'))
 
-    journal = Journal.query.get_or_404(journal_id)
-    if journal.user_id != session['user_id']:
-        flash('無權限編輯此日誌')
-        return redirect(url_for('dashboard'))
-
     try:
+        journal = Journal.query.get_or_404(journal_id)
+        if journal.user_id != session['user_id']:
+            flash('無權限編輯此日誌')
+            return redirect(url_for('dashboard'))
+
         return render_template('edit_journal.html', journal=journal)
     except Exception as e:
-        logger.error(f"edit_journal.html 渲染失敗: {e}")
+        logger.error(f"edit_journal.html 渲染失敗: {e}\n{traceback.format_exc()}")
         flash('頁面載入失敗')
         return redirect(url_for('dashboard'))
 
@@ -315,31 +337,31 @@ def _create_journal_from_data(data):
     if 'user_id' not in session:
         return ({'success': False, 'message': '未登入'}, 401)
 
-    date = (data.get('date') or '').strip()
-    location = (data.get('location') or '').strip()
-    country = (data.get('country') or '').strip()
-    content = (data.get('content') or '').strip()
-
-    logger.info(f"建立日誌: date={date}, location={location}, country={country}")
-
-    if not location or not country or not content:
-        return ({'success': False, 'message': 'location, country, content 為必填'}, 400)
-
-    if not date:
-        date = datetime.utcnow().strftime('%Y-%m-%d')
-
-    lat = 0.0
-    lng = 0.0
     try:
-        if 'lat' in data and data.get('lat') not in (None, ''):
-            lat = float(data.get('lat'))
-        if 'lng' in data and data.get('lng') not in (None, ''):
-            lng = float(data.get('lng'))
-    except ValueError as e:
-        logger.error(f"座標轉換錯誤: {e}")
-        return ({'success': False, 'message': 'lat/lng 需為數值'}, 400)
+        date = (data.get('date') or '').strip()
+        location = (data.get('location') or '').strip()
+        country = (data.get('country') or '').strip()
+        content = (data.get('content') or '').strip()
 
-    try:
+        logger.info(f"嘗試建立日誌: date={date}, location={location}, country={country}")
+
+        if not location or not country or not content:
+            return ({'success': False, 'message': 'location, country, content 為必填'}, 400)
+
+        if not date:
+            date = datetime.utcnow().strftime('%Y-%m-%d')
+
+        lat = 0.0
+        lng = 0.0
+        try:
+            if 'lat' in data and data.get('lat') not in (None, ''):
+                lat = float(data.get('lat'))
+            if 'lng' in data and data.get('lng') not in (None, ''):
+                lng = float(data.get('lng'))
+        except ValueError as e:
+            logger.error(f"座標轉換錯誤: {e}")
+            return ({'success': False, 'message': 'lat/lng 需為數值'}, 400)
+
         new_journal = Journal(
             date=date,
             location=location,
@@ -349,9 +371,12 @@ def _create_journal_from_data(data):
             lng=lng,
             user_id=session['user_id']
         )
+        
         db.session.add(new_journal)
         db.session.commit()
-        logger.info(f"日誌建立成功: ID={new_journal.id}")
+        
+        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}")
+        
         return ({'success': True, 'id': new_journal.id, 'journal': {
             'id': new_journal.id,
             'date': new_journal.date,
@@ -363,7 +388,7 @@ def _create_journal_from_data(data):
         }}, 201)
     except Exception as e:
         db.session.rollback()
-        logger.error(f"建立日誌失敗: {e}\n{traceback.format_exc()}")
+        logger.error(f"❌ 建立日誌失敗: {e}\n{traceback.format_exc()}")
         return ({'success': False, 'message': f'資料庫錯誤: {str(e)}'}, 500)
 
 @app.route('/api/journals', methods=['GET', 'POST'])
@@ -376,41 +401,39 @@ def journals_api():
         resp, status = _create_journal_from_data(data)
         return jsonify(resp), status
 
-    journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.created_at.desc()).all()
-    return jsonify([{
-        'id': j.id,
-        'date': j.date,
-        'location': j.location,
-        'country': j.country,
-        'content': j.content,
-        'lat': j.lat,
-        'lng': j.lng
-    } for j in journals])
+    try:
+        journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.created_at.desc()).all()
+        return jsonify([{
+            'id': j.id,
+            'date': j.date,
+            'location': j.location,
+            'country': j.country,
+            'content': j.content,
+            'lat': j.lat,
+            'lng': j.lng
+        } for j in journals])
+    except Exception as e:
+        logger.error(f"取得日誌列表失敗: {e}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'message': '取得日誌失敗'}), 500
 
 @app.route('/api/journals/<int:journal_id>', methods=['GET', 'PUT', 'DELETE'])
 def journal_detail(journal_id):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': '未登入'}), 401
 
-    journal = Journal.query.get_or_404(journal_id)
-    if journal.user_id != session['user_id']:
-        return jsonify({'success': False, 'message': '無權限'}), 403
+    try:
+        journal = Journal.query.get_or_404(journal_id)
+        if journal.user_id != session['user_id']:
+            return jsonify({'success': False, 'message': '無權限'}), 403
 
-    if request.method == 'DELETE':
-        try:
+        if request.method == 'DELETE':
             db.session.delete(journal)
             db.session.commit()
             logger.info(f"刪除日誌成功: {journal_id}")
             return jsonify({'success': True})
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"刪除日誌失敗: {e}")
-            return jsonify({'success': False, 'message': '刪除失敗'}), 500
-    
-    elif request.method == 'PUT':
-        # 更新日誌
-        data = _get_request_data()
-        try:
+        
+        elif request.method == 'PUT':
+            data = _get_request_data()
             journal.date = data.get('date', journal.date)
             journal.location = data.get('location', journal.location)
             journal.country = data.get('country', journal.country)
@@ -437,37 +460,41 @@ def journal_detail(journal_id):
                     'lng': journal.lng
                 }
             })
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"更新日誌失敗: {e}")
-            return jsonify({'success': False, 'message': '更新失敗'}), 500
-    
-    # GET 請求
-    return jsonify({
-        'id': journal.id,
-        'date': journal.date,
-        'location': journal.location,
-        'country': journal.country,
-        'content': journal.content,
-        'lat': journal.lat,
-        'lng': journal.lng
-    })
+        
+        # GET 請求
+        return jsonify({
+            'id': journal.id,
+            'date': journal.date,
+            'location': journal.location,
+            'country': journal.country,
+            'content': journal.content,
+            'lat': journal.lat,
+            'lng': journal.lng
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"日誌操作失敗: {e}\n{traceback.format_exc()}")
+        return jsonify({'success': False, 'message': '操作失敗'}), 500
 
 @app.route('/api/journals/country/<country>')
 def journals_by_country(country):
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': '未登入'}), 401
 
-    journals = Journal.query.filter_by(user_id=session['user_id'], country=country).all()
-    return jsonify([{
-        'id': j.id,
-        'date': j.date,
-        'location': j.location,
-        'country': j.country,
-        'content': j.content,
-        'lat': j.lat,
-        'lng': j.lng
-    } for j in journals])
+    try:
+        journals = Journal.query.filter_by(user_id=session['user_id'], country=country).all()
+        return jsonify([{
+            'id': j.id,
+            'date': j.date,
+            'location': j.location,
+            'country': j.country,
+            'content': j.content,
+            'lat': j.lat,
+            'lng': j.lng
+        } for j in journals])
+    except Exception as e:
+        logger.error(f"按國家查詢日誌失敗: {e}")
+        return jsonify({'success': False, 'message': '查詢失敗'}), 500
 
 @app.route('/health')
 def health_check():

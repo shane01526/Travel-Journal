@@ -7,9 +7,29 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .photo-editor-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            overflow: hidden;
+            background: #f1f5f9;
+            border-radius: 12px;
+            cursor: move;
+        }
+        .photo-editor-image {
+            position: absolute;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .crop-overlay {
+            position: absolute;
+            border: 2px dashed #3b82f6;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200">
-    <!-- 導航欄 -->
     <nav class="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center space-x-3">
@@ -26,20 +46,43 @@
         </div>
     </nav>
 
-    <!-- 新增日誌主體 -->
     <div class="max-w-3xl mx-auto px-4 py-10">
         <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-md">
             <h2 class="text-2xl font-light text-slate-700 mb-6 text-center">新增旅遊日誌</h2>
             
-            <!-- 成功訊息 -->
             <div id="successMessage" class="hidden mb-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-center">
                 ✓ 日誌新增成功！正在返回主頁...
             </div>
-
-            <!-- 錯誤訊息 -->
             <div id="errorMessage" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-center"></div>
 
             <form id="addJournalForm" class="space-y-5">
+                <!-- 日誌類型選擇 -->
+                <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200">
+                    <label class="block text-slate-700 font-medium text-sm mb-3">📝 日誌類型</label>
+                    <div class="flex gap-4">
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="journalType" value="text" checked class="hidden peer">
+                            <div class="border-2 border-slate-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 rounded-xl p-4 transition-all text-center hover:bg-slate-50">
+                                <svg class="w-10 h-10 mx-auto mb-2 text-slate-600 peer-checked:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <span class="font-medium text-slate-700">純文字</span>
+                                <p class="text-xs text-slate-500 mt-1">僅文字記錄</p>
+                            </div>
+                        </label>
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="journalType" value="photo" class="hidden peer">
+                            <div class="border-2 border-slate-300 peer-checked:border-purple-500 peer-checked:bg-purple-50 rounded-xl p-4 transition-all text-center hover:bg-slate-50">
+                                <svg class="w-10 h-10 mx-auto mb-2 text-slate-600 peer-checked:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                <span class="font-medium text-slate-700">圖文並茂</span>
+                                <p class="text-xs text-slate-500 mt-1">照片+文字</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-slate-600 text-sm mb-2">日期</label>
                     <input type="date" id="date" required
@@ -58,11 +101,8 @@
                         class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
                 </div>
 
-                <!-- 座標搜尋區 -->
                 <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
                     <label class="block text-slate-600 text-sm mb-3">📍 地點座標</label>
-                    
-                    <!-- 搜尋地點 -->
                     <div class="mb-3">
                         <div class="flex space-x-2">
                             <input type="text" id="searchLocation" placeholder="搜尋地點（例如：Tokyo Tower）"
@@ -72,46 +112,98 @@
                                 搜尋
                             </button>
                         </div>
-                        <p class="text-xs text-slate-500 mt-2">或使用下方連結到外部網站查詢：
+                        <p class="text-xs text-slate-500 mt-2">或使用：
                             <a href="https://www.latlong.net/" target="_blank" class="text-blue-500 hover:underline">LatLong.net</a> | 
                             <a href="https://www.google.com/maps" target="_blank" class="text-blue-500 hover:underline">Google Maps</a>
                         </p>
                     </div>
-
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <label class="block text-slate-500 text-xs mb-1">緯度 (Latitude)</label>
+                            <label class="block text-slate-500 text-xs mb-1">緯度</label>
                             <input type="number" step="any" id="lat" placeholder="35.6586"
                                 class="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 focus:outline-none focus:border-slate-400 text-sm">
                         </div>
                         <div>
-                            <label class="block text-slate-500 text-xs mb-1">經度 (Longitude)</label>
+                            <label class="block text-slate-500 text-xs mb-1">經度</label>
                             <input type="number" step="any" id="lng" placeholder="139.7454"
                                 class="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 focus:outline-none focus:border-slate-400 text-sm">
                         </div>
                     </div>
-                    <p class="text-xs text-slate-500 mt-2">💡 提示：點擊下方地圖也可直接選擇位置</p>
                 </div>
 
-                <!-- 照片上傳區 -->
-                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <label class="block text-slate-600 text-sm mb-3">📸 上傳照片（選填）</label>
-                    <div class="flex flex-col items-center space-y-3">
-                        <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                <!-- 照片上傳區（僅圖文模式顯示） -->
+                <div id="photoSection" class="hidden bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
+                    <label class="block text-purple-700 font-medium text-sm mb-3">📸 上傳照片</label>
+                    
+                    <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                    
+                    <div id="uploadArea" class="flex flex-col items-center space-y-3">
                         <button type="button" onclick="document.getElementById('photoInput').click()" 
-                            class="w-full px-4 py-3 bg-white border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-lg transition-colors text-slate-600 hover:text-slate-700">
-                            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            class="w-full px-4 py-6 bg-white border-2 border-dashed border-purple-300 hover:border-purple-400 rounded-lg transition-colors text-purple-600 hover:text-purple-700">
+                            <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                             </svg>
-                            點擊選擇照片
+                            <span class="font-medium">點擊選擇照片</span>
                         </button>
-                        <div id="photoPreview" class="hidden w-full">
-                            <img id="previewImage" src="" alt="預覽" class="w-full h-64 object-cover rounded-lg border-2 border-slate-200">
-                            <button type="button" onclick="removePhoto()" class="mt-2 w-full px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-sm">
-                                移除照片
-                            </button>
+                        <p class="text-xs text-slate-500">支援 JPG、PNG、GIF、WEBP，最大 16MB</p>
+                    </div>
+
+                    <!-- 照片編輯器 -->
+                    <div id="photoEditor" class="hidden space-y-3">
+                        <div class="photo-editor-container" id="editorContainer">
+                            <img id="editorImage" class="photo-editor-image" src="" alt="編輯照片">
+                            <div id="cropOverlay" class="crop-overlay"></div>
                         </div>
-                        <p class="text-xs text-slate-500">支援 JPG、PNG、GIF、WEBP 格式，最大 16MB</p>
+                        
+                        <div class="space-y-3 bg-white p-4 rounded-lg">
+                            <div>
+                                <label class="block text-sm text-slate-600 mb-2">🔍 縮放大小</label>
+                                <input type="range" id="scaleSlider" min="50" max="200" value="100" 
+                                    class="w-full" oninput="updateScale(this.value)">
+                                <div class="flex justify-between text-xs text-slate-500 mt-1">
+                                    <span>50%</span>
+                                    <span id="scaleValue">100%</span>
+                                    <span>200%</span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex gap-2">
+                                <button type="button" onclick="rotateImage(-90)" 
+                                    class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                    ↶ 左轉
+                                </button>
+                                <button type="button" onclick="rotateImage(90)" 
+                                    class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                    ↷ 右轉
+                                </button>
+                                <button type="button" onclick="resetPhoto()" 
+                                    class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                    🔄 重設
+                                </button>
+                            </div>
+                            
+                            <p class="text-xs text-slate-500 text-center">💡 拖曳照片調整位置</p>
+                            
+                            <div class="flex gap-2 pt-2">
+                                <button type="button" onclick="confirmPhoto()" 
+                                    class="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors font-medium">
+                                    ✓ 確認使用
+                                </button>
+                                <button type="button" onclick="cancelPhoto()" 
+                                    class="flex-1 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors">
+                                    ✕ 取消
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 照片預覽 -->
+                    <div id="photoPreview" class="hidden">
+                        <img id="finalPreview" src="" alt="最終預覽" class="w-full h-64 object-cover rounded-lg border-2 border-purple-200">
+                        <button type="button" onclick="removePhoto()" 
+                            class="mt-2 w-full px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-sm">
+                            移除照片
+                        </button>
                     </div>
                 </div>
 
@@ -122,7 +214,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-slate-600 text-sm mb-2">互動式地圖 (點擊選擇位置)</label>
+                    <label class="block text-slate-600 text-sm mb-2">互動式地圖</label>
                     <div id="map" class="w-full h-64 rounded-xl border-2 border-slate-200"></div>
                 </div>
 
@@ -139,46 +231,213 @@
     </div>
 
     <script>
-        // 儲存照片的 base64 資料
         let photoBase64 = null;
+        let journalType = 'text';
+        
+        // 照片編輯器變數
+        let originalImage = null;
+        let imageScale = 1;
+        let imageRotation = 0;
+        let imageX = 0;
+        let imageY = 0;
+        let isDragging = false;
+        let startX, startY;
+
+        // 監聽日誌類型變更
+        document.querySelectorAll('input[name="journalType"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                journalType = this.value;
+                const photoSection = document.getElementById('photoSection');
+                if (journalType === 'photo') {
+                    photoSection.classList.remove('hidden');
+                } else {
+                    photoSection.classList.add('hidden');
+                    // 清除照片
+                    photoBase64 = null;
+                    resetPhotoUI();
+                }
+            });
+        });
 
         // 處理照片上傳
         function handlePhotoUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            // 檢查檔案大小（16MB）
             if (file.size > 16 * 1024 * 1024) {
                 alert('檔案太大！請選擇小於 16MB 的照片。');
                 return;
             }
 
-            // 檢查檔案類型
             const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
             if (!allowedTypes.includes(file.type)) {
-                alert('不支援的檔案格式！請選擇 JPG、PNG、GIF 或 WEBP 格式。');
+                alert('不支援的檔案格式！');
                 return;
             }
 
-            // 讀取並轉換為 base64
             const reader = new FileReader();
             reader.onload = function(e) {
-                photoBase64 = e.target.result;
-                document.getElementById('previewImage').src = photoBase64;
-                document.getElementById('photoPreview').classList.remove('hidden');
+                originalImage = e.target.result;
+                showPhotoEditor();
             };
             reader.readAsDataURL(file);
+        }
+
+        // 顯示照片編輯器
+        function showPhotoEditor() {
+            document.getElementById('uploadArea').classList.add('hidden');
+            document.getElementById('photoEditor').classList.remove('hidden');
+            
+            const img = document.getElementById('editorImage');
+            img.src = originalImage;
+            img.onload = function() {
+                resetPhotoTransform();
+                initDragAndDrop();
+            };
+        }
+
+        // 初始化拖曳功能
+        function initDragAndDrop() {
+            const container = document.getElementById('editorContainer');
+            const img = document.getElementById('editorImage');
+
+            container.onmousedown = function(e) {
+                isDragging = true;
+                startX = e.clientX - imageX;
+                startY = e.clientY - imageY;
+                container.style.cursor = 'grabbing';
+            };
+
+            document.onmousemove = function(e) {
+                if (!isDragging) return;
+                imageX = e.clientX - startX;
+                imageY = e.clientY - startY;
+                updateImageTransform();
+            };
+
+            document.onmouseup = function() {
+                isDragging = false;
+                container.style.cursor = 'move';
+            };
+
+            // 觸控支援
+            container.ontouchstart = function(e) {
+                isDragging = true;
+                const touch = e.touches[0];
+                startX = touch.clientX - imageX;
+                startY = touch.clientY - imageY;
+            };
+
+            document.ontouchmove = function(e) {
+                if (!isDragging) return;
+                const touch = e.touches[0];
+                imageX = touch.clientX - startX;
+                imageY = touch.clientY - startY;
+                updateImageTransform();
+                e.preventDefault();
+            };
+
+            document.ontouchend = function() {
+                isDragging = false;
+            };
+        }
+
+        // 更新縮放
+        function updateScale(value) {
+            imageScale = value / 100;
+            document.getElementById('scaleValue').textContent = value + '%';
+            updateImageTransform();
+        }
+
+        // 旋轉照片
+        function rotateImage(degrees) {
+            imageRotation += degrees;
+            updateImageTransform();
+        }
+
+        // 更新照片變換
+        function updateImageTransform() {
+            const img = document.getElementById('editorImage');
+            img.style.transform = `translate(${imageX}px, ${imageY}px) scale(${imageScale}) rotate(${imageRotation}deg)`;
+        }
+
+        // 重設照片變換
+        function resetPhotoTransform() {
+            const container = document.getElementById('editorContainer');
+            const img = document.getElementById('editorImage');
+            
+            imageScale = 1;
+            imageRotation = 0;
+            imageX = (container.offsetWidth - img.naturalWidth) / 2;
+            imageY = (container.offsetHeight - img.naturalHeight) / 2;
+            
+            document.getElementById('scaleSlider').value = 100;
+            document.getElementById('scaleValue').textContent = '100%';
+            
+            updateImageTransform();
+        }
+
+        // 重設照片
+        function resetPhoto() {
+            resetPhotoTransform();
+        }
+
+        // 確認使用照片
+        function confirmPhoto() {
+            const container = document.getElementById('editorContainer');
+            const canvas = document.createElement('canvas');
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+            const ctx = canvas.getContext('2d');
+
+            const img = new Image();
+            img.onload = function() {
+                ctx.save();
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.translate(imageX, imageY);
+                ctx.scale(imageScale, imageScale);
+                ctx.rotate(imageRotation * Math.PI / 180);
+                ctx.drawImage(img, -img.width / 2, -img.height / 2);
+                ctx.restore();
+
+                photoBase64 = canvas.toDataURL('image/jpeg', 0.9);
+                showFinalPreview();
+            };
+            img.src = originalImage;
+        }
+
+        // 顯示最終預覽
+        function showFinalPreview() {
+            document.getElementById('photoEditor').classList.add('hidden');
+            document.getElementById('photoPreview').classList.remove('hidden');
+            document.getElementById('finalPreview').src = photoBase64;
+        }
+
+        // 取消照片
+        function cancelPhoto() {
+            resetPhotoUI();
         }
 
         // 移除照片
         function removePhoto() {
             photoBase64 = null;
-            document.getElementById('photoInput').value = '';
-            document.getElementById('photoPreview').classList.add('hidden');
-            document.getElementById('previewImage').src = '';
+            resetPhotoUI();
         }
 
-        // 初始化地圖
+        // 重設照片 UI
+        function resetPhotoUI() {
+            document.getElementById('photoInput').value = '';
+            document.getElementById('uploadArea').classList.remove('hidden');
+            document.getElementById('photoEditor').classList.add('hidden');
+            document.getElementById('photoPreview').classList.add('hidden');
+            originalImage = null;
+            imageScale = 1;
+            imageRotation = 0;
+            imageX = 0;
+            imageY = 0;
+        }
+
+        // 地圖初始化
         const map = L.map('map').setView([25.0330, 121.5654], 3);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
@@ -186,23 +445,19 @@
 
         let marker = null;
 
-        // 地圖點擊事件
         map.on('click', function(e) {
             const { lat, lng } = e.latlng;
             updateMarkerAndInputs(lat, lng);
         });
 
-        // 更新標記和輸入框
         function updateMarkerAndInputs(lat, lng) {
             document.getElementById('lat').value = lat.toFixed(6);
             document.getElementById('lng').value = lng.toFixed(6);
-
             if (marker) marker.remove();
             marker = L.marker([lat, lng]).addTo(map);
             map.setView([lat, lng], 13);
         }
 
-        // 搜尋座標功能
         async function searchCoordinates() {
             const searchTerm = document.getElementById('searchLocation').value.trim();
             if (!searchTerm) {
@@ -218,18 +473,15 @@
                     const lat = parseFloat(data[0].lat);
                     const lng = parseFloat(data[0].lon);
                     updateMarkerAndInputs(lat, lng);
-                    
-                    alert(`找到地點：${data[0].display_name}\n緯度：${lat}\n經度：${lng}`);
+                    alert(`找到地點：${data[0].display_name}`);
                 } else {
-                    alert('找不到該地點，請嘗試：\n1. 使用英文名稱\n2. 加入城市或國家（例如：Tokyo Tower, Japan）\n3. 使用外部連結查詢');
+                    alert('找不到該地點');
                 }
             } catch (error) {
-                console.error('搜尋錯誤:', error);
-                alert('搜尋失敗，請稍後再試或使用外部連結');
+                alert('搜尋失敗');
             }
         }
 
-        // Enter 鍵搜尋
         document.getElementById('searchLocation').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -237,32 +489,28 @@
             }
         });
 
-        // 預設日期為今日
         document.getElementById('date').value = new Date().toISOString().split('T')[0];
 
-        // 顯示錯誤訊息
         function showError(message) {
             const errorDiv = document.getElementById('errorMessage');
             errorDiv.textContent = '❌ ' + message;
             errorDiv.classList.remove('hidden');
-            setTimeout(() => {
-                errorDiv.classList.add('hidden');
-            }, 5000);
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
         }
 
-        // 顯示成功訊息並導向
         function showSuccessAndRedirect() {
-            const successDiv = document.getElementById('successMessage');
-            successDiv.classList.remove('hidden');
-            
-            setTimeout(() => {
-                window.location.href = '/dashboard';
-            }, 1500);
+            document.getElementById('successMessage').classList.remove('hidden');
+            setTimeout(() => window.location.href = '/dashboard', 1500);
         }
 
-        // 提交表單
         document.getElementById('addJournalForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // 檢查圖文模式是否有上傳照片
+            if (journalType === 'photo' && !photoBase64) {
+                showError('圖文並茂模式需要上傳照片');
+                return;
+            }
 
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
@@ -275,10 +523,9 @@
                 lat: parseFloat(document.getElementById('lat').value) || 0,
                 lng: parseFloat(document.getElementById('lng').value) || 0,
                 content: document.getElementById('content').value,
-                photo: photoBase64  // 加入照片資料
+                photo: journalType === 'photo' ? photoBase64 : null,
+                journal_type: journalType
             };
-
-            console.log('提交資料（不含照片）:', { ...data, photo: photoBase64 ? '有照片' : '無照片' });
 
             try {
                 const res = await fetch('/api/journals', {
@@ -288,7 +535,6 @@
                 });
                 
                 const result = await res.json();
-                console.log('伺服器回應:', result);
 
                 if (result.success) {
                     showSuccessAndRedirect();
@@ -299,7 +545,7 @@
                 }
             } catch (err) {
                 console.error('提交錯誤:', err);
-                showError('伺服器錯誤，請稍後再試');
+                showError('伺服器錯誤');
                 submitBtn.disabled = false;
                 submitBtn.textContent = '儲存日誌';
             }

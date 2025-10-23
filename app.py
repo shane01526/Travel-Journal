@@ -90,7 +90,8 @@ class Journal(db.Model):
     content = db.Column(db.Text, nullable=False)
     lat = db.Column(db.Float, default=0.0)
     lng = db.Column(db.Float, default=0.0)
-    photo = db.Column(db.Text, nullable=True)  # 新增：儲存 base64 編碼的照片
+    photo = db.Column(db.Text, nullable=True)
+    journal_type = db.Column(db.String(20), default='text')  # 新增：日誌類型 'text' 或 'photo'
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

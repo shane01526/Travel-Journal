@@ -93,6 +93,28 @@
                     <p class="text-xs text-slate-500 mt-2">💡 提示：點擊下方地圖也可直接選擇位置</p>
                 </div>
 
+                <!-- 照片上傳區 -->
+                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <label class="block text-slate-600 text-sm mb-3">📸 上傳照片（選填）</label>
+                    <div class="flex flex-col items-center space-y-3">
+                        <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                        <button type="button" onclick="document.getElementById('photoInput').click()" 
+                            class="w-full px-4 py-3 bg-white border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-lg transition-colors text-slate-600 hover:text-slate-700">
+                            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            點擊選擇照片
+                        </button>
+                        <div id="photoPreview" class="hidden w-full">
+                            <img id="previewImage" src="" alt="預覽" class="w-full h-64 object-cover rounded-lg border-2 border-slate-200">
+                            <button type="button" onclick="removePhoto()" class="mt-2 w-full px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-sm">
+                                移除照片
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-500">支援 JPG、PNG、GIF、WEBP 格式，最大 16MB</p>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-slate-600 text-sm mb-2">日誌內容</label>
                     <textarea id="content" rows="6" placeholder="記錄你的旅程..." required
@@ -117,6 +139,45 @@
     </div>
 
     <script>
+        // 儲存照片的 base64 資料
+        let photoBase64 = null;
+
+        // 處理照片上傳
+        function handlePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 檢查檔案大小（16MB）
+            if (file.size > 16 * 1024 * 1024) {
+                alert('檔案太大！請選擇小於 16MB 的照片。');
+                return;
+            }
+
+            // 檢查檔案類型
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('不支援的檔案格式！請選擇 JPG、PNG、GIF 或 WEBP 格式。');
+                return;
+            }
+
+            // 讀取並轉換為 base64
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                photoBase64 = e.target.result;
+                document.getElementById('previewImage').src = photoBase64;
+                document.getElementById('photoPreview').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 移除照片
+        function removePhoto() {
+            photoBase64 = null;
+            document.getElementById('photoInput').value = '';
+            document.getElementById('photoPreview').classList.add('hidden');
+            document.getElementById('previewImage').src = '';
+        }
+
         // 初始化地圖
         const map = L.map('map').setView([25.0330, 121.5654], 3);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -141,7 +202,7 @@
             map.setView([lat, lng], 13);
         }
 
-        // 搜尋座標功能（使用 Nominatim API）
+        // 搜尋座標功能
         async function searchCoordinates() {
             const searchTerm = document.getElementById('searchLocation').value.trim();
             if (!searchTerm) {
@@ -158,7 +219,6 @@
                     const lng = parseFloat(data[0].lon);
                     updateMarkerAndInputs(lat, lng);
                     
-                    // 顯示找到的地點名稱
                     alert(`找到地點：${data[0].display_name}\n緯度：${lat}\n經度：${lng}`);
                 } else {
                     alert('找不到該地點，請嘗試：\n1. 使用英文名稱\n2. 加入城市或國家（例如：Tokyo Tower, Japan）\n3. 使用外部連結查詢');
@@ -195,7 +255,6 @@
             const successDiv = document.getElementById('successMessage');
             successDiv.classList.remove('hidden');
             
-            // 1.5 秒後導向 dashboard
             setTimeout(() => {
                 window.location.href = '/dashboard';
             }, 1500);
@@ -205,7 +264,6 @@
         document.getElementById('addJournalForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // 禁用提交按鈕防止重複提交
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.textContent = '儲存中...';
@@ -216,10 +274,11 @@
                 country: document.getElementById('country').value,
                 lat: parseFloat(document.getElementById('lat').value) || 0,
                 lng: parseFloat(document.getElementById('lng').value) || 0,
-                content: document.getElementById('content').value
+                content: document.getElementById('content').value,
+                photo: photoBase64  // 加入照片資料
             };
 
-            console.log('提交資料:', data);
+            console.log('提交資料（不含照片）:', { ...data, photo: photoBase64 ? '有照片' : '無照片' });
 
             try {
                 const res = await fetch('/api/journals', {
@@ -232,7 +291,6 @@
                 console.log('伺服器回應:', result);
 
                 if (result.success) {
-                    // 顯示成功訊息並導向 dashboard
                     showSuccessAndRedirect();
                 } else {
                     showError(result.message || '請稍後再試');

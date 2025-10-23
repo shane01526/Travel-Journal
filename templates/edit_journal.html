@@ -95,6 +95,48 @@
                     <p class="text-xs text-slate-500 mt-2">💡 提示：點擊下方地圖也可直接選擇位置</p>
                 </div>
 
+                <!-- 照片上傳區 -->
+                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <label class="block text-slate-600 text-sm mb-3">📸 日誌照片</label>
+                    <div class="flex flex-col items-center space-y-3">
+                        {% if journal.photo %}
+                        <div id="currentPhoto" class="w-full">
+                            <img src="{{ journal.photo }}" alt="目前照片" class="w-full h-64 object-cover rounded-lg border-2 border-slate-200">
+                            <button type="button" onclick="changePhoto()" class="mt-2 w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                更換照片
+                            </button>
+                        </div>
+                        {% else %}
+                        <div id="currentPhoto" class="w-full text-center text-slate-400 py-4">
+                            尚未上傳照片
+                        </div>
+                        {% endif %}
+                        
+                        <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                        
+                        <div id="photoPreview" class="hidden w-full">
+                            <img id="previewImage" src="" alt="預覽" class="w-full h-64 object-cover rounded-lg border-2 border-slate-200">
+                            <div class="mt-2 flex space-x-2">
+                                <button type="button" onclick="cancelPhotoChange()" class="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                    取消
+                                </button>
+                                <button type="button" onclick="removePhoto()" class="flex-1 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-sm">
+                                    移除照片
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <button type="button" id="uploadButton" onclick="document.getElementById('photoInput').click()" 
+                            class="w-full px-4 py-3 bg-white border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-lg transition-colors text-slate-600 hover:text-slate-700 {% if journal.photo %}hidden{% endif %}">
+                            <svg class="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            點擊上傳照片
+                        </button>
+                        <p class="text-xs text-slate-500">支援 JPG、PNG、GIF、WEBP 格式，最大 16MB</p>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-slate-600 text-sm mb-2">日誌內容</label>
                     <textarea id="content" rows="6" placeholder="記錄你的旅程..." required
@@ -119,6 +161,67 @@
     </div>
 
     <script>
+        // 儲存照片的 base64 資料
+        let photoBase64 = {% if journal.photo %}'{{ journal.photo }}'{% else %}null{% endif %};
+        let photoChanged = false;
+
+        // 更換照片
+        function changePhoto() {
+            document.getElementById('photoInput').click();
+        }
+
+        // 處理照片上傳
+        function handlePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 檢查檔案大小（16MB）
+            if (file.size > 16 * 1024 * 1024) {
+                alert('檔案太大！請選擇小於 16MB 的照片。');
+                return;
+            }
+
+            // 檢查檔案類型
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('不支援的檔案格式！請選擇 JPG、PNG、GIF 或 WEBP 格式。');
+                return;
+            }
+
+            // 讀取並轉換為 base64
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                photoBase64 = e.target.result;
+                photoChanged = true;
+                document.getElementById('previewImage').src = photoBase64;
+                document.getElementById('currentPhoto').classList.add('hidden');
+                document.getElementById('photoPreview').classList.remove('hidden');
+                document.getElementById('uploadButton').classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 取消照片變更
+        function cancelPhotoChange() {
+            photoChanged = false;
+            document.getElementById('photoInput').value = '';
+            document.getElementById('photoPreview').classList.add('hidden');
+            document.getElementById('currentPhoto').classList.remove('hidden');
+            {% if not journal.photo %}
+            document.getElementById('uploadButton').classList.remove('hidden');
+            {% endif %}
+        }
+
+        // 移除照片
+        function removePhoto() {
+            photoBase64 = null;
+            photoChanged = true;
+            document.getElementById('photoInput').value = '';
+            document.getElementById('photoPreview').classList.add('hidden');
+            document.getElementById('currentPhoto').innerHTML = '<div class="w-full text-center text-slate-400 py-4">尚未上傳照片</div>';
+            document.getElementById('uploadButton').classList.remove('hidden');
+        }
+
         // 初始化地圖，使用日誌的座標
         const initialLat = parseFloat('{{ journal.lat }}') || 25.0330;
         const initialLng = parseFloat('{{ journal.lng }}') || 121.5654;
@@ -151,7 +254,7 @@
             map.setView([lat, lng], 13);
         }
 
-        // 搜尋座標功能（使用 Nominatim API）
+        // 搜尋座標功能
         async function searchCoordinates() {
             const searchTerm = document.getElementById('searchLocation').value.trim();
             if (!searchTerm) {
@@ -224,7 +327,12 @@
                 content: document.getElementById('content').value
             };
 
-            console.log('更新資料:', data);
+            // 只有在照片有變更時才傳送照片資料
+            if (photoChanged) {
+                data.photo = photoBase64;
+            }
+
+            console.log('更新資料（不含照片）:', { ...data, photo: data.photo ? '有照片變更' : '無變更' });
 
             try {
                 const res = await fetch(`/api/journals/${journalId}`, {

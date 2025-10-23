@@ -1,11 +1,13 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
 import secrets
 import logging
 import traceback
+import base64
 from dotenv import load_dotenv
 
 # 載入環境變數
@@ -17,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 限制上傳檔案大小為 16MB
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # 資料庫配置函數
 def get_database_url():
@@ -33,11 +41,9 @@ def get_database_url():
             logger.warning("資料庫連線資訊不完整，使用 SQLite")
             return 'sqlite:///travel_journal.db'
     
-    # 修正 Heroku PostgreSQL URL
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     
-    # 顯示安全的連接訊息
     if '@' in database_url:
         safe_url = '***@' + database_url.split('@')[-1]
     else:
@@ -84,6 +90,7 @@ class Journal(db.Model):
     content = db.Column(db.Text, nullable=False)
     lat = db.Column(db.Float, default=0.0)
     lng = db.Column(db.Float, default=0.0)
+    photo = db.Column(db.Text, nullable=True)  # 新增：儲存 base64 編碼的照片
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -112,16 +119,14 @@ def _get_request_data():
             return {}
     return request.form.to_dict()
 
-# 路由
+# 路由保持原樣，只修改需要的部分
 @app.route('/')
 def index():
     """首頁 - 顯示歡迎介面"""
     try:
-        # 如果已登入，取得用戶資訊
         user = None
         if 'user_id' in session:
             user = User.query.get(session['user_id'])
-            # 如果用戶不存在，清除 session
             if not user:
                 session.clear()
         
@@ -271,10 +276,8 @@ def dashboard():
             flash('用戶不存在，請重新登入')
             return redirect(url_for('login'))
 
-        # 確保從資料庫重新查詢最新的日誌資料
-        journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.created_at.desc()).all()
+        journals = Journal.query.filter_by(user_id=user.id).order_by(Journal.date.desc(), Journal.created_at.desc()).all()
         
-        # 轉換為字典列表，確保所有欄位都正確傳遞
         journals_data = []
         for j in journals:
             journals_data.append({
@@ -284,13 +287,13 @@ def dashboard():
                 'country': j.country,
                 'content': j.content,
                 'lat': float(j.lat) if j.lat else 0.0,
-                'lng': float(j.lng) if j.lng else 0.0
+                'lng': float(j.lng) if j.lng else 0.0,
+                'photo': j.photo  # 新增照片欄位
             })
         
         countries = list({j.country for j in journals})
         
         logger.info(f"用戶 {user.name} 查看 dashboard，共有 {len(journals)} 篇日誌")
-        logger.info(f"日誌資料: {journals_data}")
         
         return render_template('dashboard.html',
                                user=user,
@@ -358,6 +361,7 @@ def _create_journal_from_data(data):
         location = (data.get('location') or '').strip()
         country = (data.get('country') or '').strip()
         content = (data.get('content') or '').strip()
+        photo = data.get('photo')  # 新增：取得照片 base64 資料
 
         logger.info(f"嘗試建立日誌: date={date}, location={location}, country={country}")
 
@@ -367,7 +371,6 @@ def _create_journal_from_data(data):
         if not date:
             date = datetime.utcnow().strftime('%Y-%m-%d')
 
-        # 確保座標是正確的浮點數
         lat = 0.0
         lng = 0.0
         try:
@@ -376,8 +379,7 @@ def _create_journal_from_data(data):
             if 'lng' in data and data.get('lng') not in (None, '', 'null', 'undefined'):
                 lng = float(data.get('lng'))
         except (ValueError, TypeError) as e:
-            logger.error(f"座標轉換錯誤: {e}, lat={data.get('lat')}, lng={data.get('lng')}")
-            # 如果座標轉換失敗，使用預設值 0.0
+            logger.error(f"座標轉換錯誤: {e}")
             lat = 0.0
             lng = 0.0
 
@@ -390,13 +392,14 @@ def _create_journal_from_data(data):
             content=content,
             lat=lat,
             lng=lng,
+            photo=photo,  # 新增：儲存照片
             user_id=session['user_id']
         )
         
         db.session.add(new_journal)
         db.session.commit()
         
-        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}, Lat={lat}, Lng={lng}")
+        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}")
         
         return ({'success': True, 'id': new_journal.id, 'journal': {
             'id': new_journal.id,
@@ -405,7 +408,8 @@ def _create_journal_from_data(data):
             'country': new_journal.country,
             'content': new_journal.content,
             'lat': new_journal.lat,
-            'lng': new_journal.lng
+            'lng': new_journal.lng,
+            'photo': new_journal.photo
         }}, 201)
     except Exception as e:
         db.session.rollback()
@@ -423,7 +427,7 @@ def journals_api():
         return jsonify(resp), status
 
     try:
-        journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.created_at.desc()).all()
+        journals = Journal.query.filter_by(user_id=session['user_id']).order_by(Journal.date.desc(), Journal.created_at.desc()).all()
         return jsonify([{
             'id': j.id,
             'date': j.date,
@@ -431,7 +435,8 @@ def journals_api():
             'country': j.country,
             'content': j.content,
             'lat': float(j.lat) if j.lat else 0.0,
-            'lng': float(j.lng) if j.lng else 0.0
+            'lng': float(j.lng) if j.lng else 0.0,
+            'photo': j.photo
         } for j in journals])
     except Exception as e:
         logger.error(f"取得日誌列表失敗: {e}\n{traceback.format_exc()}")
@@ -460,7 +465,9 @@ def journal_detail(journal_id):
             journal.country = data.get('country', journal.country)
             journal.content = data.get('content', journal.content)
             
-            # 更新座標
+            if 'photo' in data:
+                journal.photo = data.get('photo')
+            
             if 'lat' in data:
                 try:
                     journal.lat = float(data.get('lat', 0))
@@ -485,11 +492,11 @@ def journal_detail(journal_id):
                     'country': journal.country,
                     'content': journal.content,
                     'lat': float(journal.lat) if journal.lat else 0.0,
-                    'lng': float(journal.lng) if journal.lng else 0.0
+                    'lng': float(journal.lng) if journal.lng else 0.0,
+                    'photo': journal.photo
                 }
             })
         
-        # GET 請求
         return jsonify({
             'id': journal.id,
             'date': journal.date,
@@ -497,7 +504,8 @@ def journal_detail(journal_id):
             'country': journal.country,
             'content': journal.content,
             'lat': float(journal.lat) if journal.lat else 0.0,
-            'lng': float(journal.lng) if journal.lng else 0.0
+            'lng': float(journal.lng) if journal.lng else 0.0,
+            'photo': journal.photo
         })
     except Exception as e:
         db.session.rollback()
@@ -518,7 +526,8 @@ def journals_by_country(country):
             'country': j.country,
             'content': j.content,
             'lat': float(j.lat) if j.lat else 0.0,
-            'lng': float(j.lng) if j.lng else 0.0
+            'lng': float(j.lng) if j.lng else 0.0,
+            'photo': j.photo
         } for j in journals])
     except Exception as e:
         logger.error(f"按國家查詢日誌失敗: {e}")
@@ -554,7 +563,6 @@ def server_error(e):
     except:
         return "500 Internal Server Error", 500
 
-# 初始化資料庫
 if __name__ != '__main__':
     init_db()
 

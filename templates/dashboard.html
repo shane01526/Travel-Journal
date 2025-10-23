@@ -10,53 +10,84 @@
     <style>
         .leaflet-popup-content {
             margin: 12px;
-            max-width: 300px;
+            max-width: 400px;
+            max-height: 500px;
+            overflow-y: auto;
         }
-        .popup-title {
+        .journal-item {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 0;
+        }
+        .journal-item:last-child {
+            border-bottom: none;
+        }
+        .journal-title {
             font-weight: 600;
             color: #334155;
-            margin-bottom: 8px;
-            font-size: 16px;
+            margin-bottom: 6px;
+            font-size: 15px;
         }
-        .popup-date {
+        .journal-date {
             color: #64748b;
-            font-size: 13px;
+            font-size: 12px;
             margin-bottom: 8px;
         }
-        .popup-content {
+        .journal-content {
             color: #475569;
-            font-size: 14px;
+            font-size: 13px;
             line-height: 1.5;
-            max-height: 150px;
+            max-height: 100px;
             overflow-y: auto;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
-        .popup-buttons {
+        .journal-photo {
+            width: 100%;
+            max-height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .journal-buttons {
             display: flex;
-            gap: 8px;
-            margin-top: 10px;
+            gap: 6px;
         }
-        .popup-button {
+        .journal-button {
             flex: 1;
-            padding: 6px 12px;
+            padding: 5px 10px;
             background-color: #64748b;
             color: white;
             border-radius: 6px;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 12px;
             transition: background-color 0.2s;
             text-align: center;
             cursor: pointer;
             border: none;
         }
-        .popup-button:hover {
+        .journal-button:hover {
             background-color: #475569;
         }
-        .popup-button.edit {
+        .journal-button.edit {
             background-color: #3b82f6;
         }
-        .popup-button.edit:hover {
+        .journal-button.edit:hover {
             background-color: #2563eb;
+        }
+        .location-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 12px;
+            border-radius: 8px 8px 0 0;
+            margin: -12px -12px 12px -12px;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .journal-count {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 8px;
         }
     </style>
 </head>
@@ -117,7 +148,7 @@
         <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-md mb-8">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-light text-slate-700">🗺️ 旅行地圖</h2>
-                <span class="text-sm text-slate-500">點擊標記查看和編輯日誌</span>
+                <span class="text-sm text-slate-500">點擊標記查看日誌（同地點顯示所有日誌）</span>
             </div>
             <div id="map" class="w-full h-96 rounded-xl"></div>
         </div>
@@ -146,6 +177,9 @@
                                     </button>
                                     {% endif %}
                                 </div>
+                                {% if journal.photo %}
+                                <img src="{{ journal.photo }}" alt="日誌照片" class="w-full max-w-md h-48 object-cover rounded-lg mb-2 border border-slate-200">
+                                {% endif %}
                                 <p class="text-slate-600 text-sm">{{ journal.content[:150] }}{% if journal.content|length > 150 %}...{% endif %}</p>
                             </div>
                             <div class="flex space-x-2 ml-4">
@@ -187,52 +221,89 @@
 
         // 儲存所有標記的引用
         const markers = {};
+        const locationGroups = {};  // 按座標分組的日誌
 
         // 從伺服器獲取日誌資料
         const journals = {{ journals | tojson | safe }};
         
         console.log('載入的日誌數量:', journals.length);
-        console.log('日誌資料:', journals);
 
-        // 添加標記到地圖
+        // 按座標分組日誌（四捨五入到小數點後3位以處理相近座標）
         journals.forEach(journal => {
-            console.log('處理日誌:', journal.id, '座標:', journal.lat, journal.lng);
-            
-            // 檢查座標是否有效（不是 0,0）
             if (journal.lat && journal.lng && (Math.abs(journal.lat) > 0.001 || Math.abs(journal.lng) > 0.001)) {
-                // 建立彈出視窗內容
-                const popupContent = `
-                    <div class="popup-title">${journal.location}</div>
-                    <div class="popup-date">📅 ${journal.date} | 🌍 ${journal.country}</div>
-                    <div class="popup-content">${journal.content}</div>
-                    <div class="popup-buttons">
-                        <a href="/edit_journal/${journal.id}" class="popup-button edit">✏️ 編輯</a>
-                        <button onclick="viewJournalDetail(${journal.id})" class="popup-button">📖 詳情</button>
+                const latKey = journal.lat.toFixed(3);
+                const lngKey = journal.lng.toFixed(3);
+                const key = `${latKey},${lngKey}`;
+                
+                if (!locationGroups[key]) {
+                    locationGroups[key] = [];
+                }
+                locationGroups[key].push(journal);
+            }
+        });
+
+        // 為每個地點建立標記
+        Object.keys(locationGroups).forEach(key => {
+            const journalsAtLocation = locationGroups[key];
+            
+            // 按日期排序（由近到遠）
+            journalsAtLocation.sort((a, b) => {
+                return new Date(b.date) - new Date(a.date);
+            });
+
+            // 使用第一個日誌的座標作為標記位置
+            const firstJournal = journalsAtLocation[0];
+            const lat = firstJournal.lat;
+            const lng = firstJournal.lng;
+
+            // 建立彈出視窗內容（包含所有該地點的日誌）
+            let popupContent = `<div class="location-header">
+                ${firstJournal.location}
+                <span class="journal-count">${journalsAtLocation.length} 篇日誌</span>
+            </div>`;
+
+            journalsAtLocation.forEach((journal, index) => {
+                popupContent += `
+                    <div class="journal-item">
+                        <div class="journal-date">📅 ${journal.date} | 🌍 ${journal.country}</div>
+                        ${journal.photo ? `<img src="${journal.photo}" alt="日誌照片" class="journal-photo">` : ''}
+                        <div class="journal-content">${journal.content}</div>
+                        <div class="journal-buttons">
+                            <a href="/edit_journal/${journal.id}" class="journal-button edit">✏️ 編輯</a>
+                            <button onclick="viewJournalDetail(${journal.id})" class="journal-button">📖 查看</button>
+                        </div>
                     </div>
                 `;
+            });
 
-                // 建立標記
-                const marker = L.marker([journal.lat, journal.lng])
-                    .bindPopup(popupContent, {
-                        maxWidth: 300,
-                        className: 'custom-popup'
-                    })
-                    .addTo(map);
+            // 建立標記
+            const marker = L.marker([lat, lng])
+                .bindPopup(popupContent, {
+                    maxWidth: 400,
+                    maxHeight: 500,
+                    className: 'custom-popup'
+                })
+                .addTo(map);
 
-                // 儲存標記引用
-                markers[journal.id] = marker;
-                
-                console.log('已新增標記:', journal.id, '位置:', journal.lat, journal.lng);
-            } else {
-                console.log('座標無效，跳過標記:', journal.id);
-            }
+            // 儲存標記引用（使用第一個日誌的ID作為key）
+            markers[firstJournal.id] = marker;
+            
+            // 為該地點的所有日誌建立標記引用（用於定位功能）
+            journalsAtLocation.forEach(journal => {
+                if (journal.id !== firstJournal.id) {
+                    markers[journal.id] = marker;
+                }
+            });
+            
+            console.log(`已新增標記: ${firstJournal.location} (${journalsAtLocation.length} 篇日誌)`);
         });
 
         // 如果有標記，調整地圖視野以顯示所有標記
         if (Object.keys(markers).length > 0) {
-            const group = L.featureGroup(Object.values(markers));
+            const uniqueMarkers = [...new Set(Object.values(markers))];
+            const group = L.featureGroup(uniqueMarkers);
             map.fitBounds(group.getBounds().pad(0.1));
-            console.log('已調整地圖視野以顯示', Object.keys(markers).length, '個標記');
+            console.log('已調整地圖視野以顯示', uniqueMarkers.length, '個標記');
         } else {
             console.log('沒有有效的標記可顯示');
         }
@@ -244,7 +315,7 @@
             // 找到並打開對應的標記彈窗
             Object.values(markers).forEach(marker => {
                 const markerLatLng = marker.getLatLng();
-                if (Math.abs(markerLatLng.lat - lat) < 0.0001 && Math.abs(markerLatLng.lng - lng) < 0.0001) {
+                if (Math.abs(markerLatLng.lat - lat) < 0.01 && Math.abs(markerLatLng.lng - lng) < 0.01) {
                     marker.openPopup();
                 }
             });
@@ -276,13 +347,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    // 從地圖移除標記
-                    if (markers[id]) {
-                        map.removeLayer(markers[id]);
-                        delete markers[id];
-                    }
-                    
-                    // 重新載入頁面
+                    // 重新載入頁面以更新地圖和列表
                     window.location.reload();
                 } else {
                     alert('刪除失敗，請稍後再試');

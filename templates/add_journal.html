@@ -8,233 +8,306 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&display=swap');
+        
+        .font-serif { font-family: 'Noto Serif TC', serif; }
+        
         .photo-editor-container {
             position: relative;
             width: 100%;
-            height: 400px;
+            height: 500px;
             overflow: hidden;
-            background: #f1f5f9;
-            border-radius: 12px;
+            background: #f5f5f4;
+            border-radius: 16px;
             cursor: move;
+            border: 2px solid #e7e5e4;
         }
+        
         .photo-editor-image {
             position: absolute;
             user-select: none;
             -webkit-user-select: none;
+            -moz-user-select: none;
         }
-        .crop-overlay {
-            position: absolute;
-            border: 2px dashed #3b82f6;
-            pointer-events: none;
+        
+        .btn-mode {
+            transition: all 0.3s ease;
+        }
+        
+        .btn-mode.active {
+            background: linear-gradient(135deg, #2c5f2d 0%, #3d7f3f 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(44, 95, 45, 0.3);
         }
     </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-stone-100 via-slate-100 to-stone-200">
-    <nav class="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <span class="text-xl font-light text-slate-700">旅行日誌</span>
-            </div>
-            <div class="flex items-center space-x-4">
-                <a href="/dashboard" class="text-slate-600 hover:text-slate-800 text-sm transition-colors">返回主頁</a>
-                <a href="/logout" class="text-slate-500 hover:text-slate-700 text-sm transition-colors">登出</a>
+<body class="bg-stone-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-50 border-b border-stone-200">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex justify-between items-center">
+                <a href="/" class="flex items-center space-x-3">
+                    <svg class="w-8 h-8 text-emerald-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
+                    <span class="text-xl font-serif text-slate-800">旅行日誌</span>
+                </a>
+                <div class="flex items-center space-x-4">
+                    <a href="/dashboard" class="text-slate-600 hover:text-emerald-700 text-sm transition-colors">返回書櫃</a>
+                    <a href="/logout" class="text-slate-500 hover:text-slate-700 text-sm transition-colors">登出</a>
+                </div>
             </div>
         </div>
     </nav>
 
-    <div class="max-w-3xl mx-auto px-4 py-10">
-        <div class="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-md">
-            <h2 class="text-2xl font-light text-slate-700 mb-6 text-center">新增旅遊日誌</h2>
-            
-            <div id="successMessage" class="hidden mb-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-center">
-                ✓ 日誌新增成功！正在返回主頁...
+    <!-- Editor Toolbar -->
+    <div class="bg-white border-b border-stone-200 sticky top-16 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center gap-2">
+                    <button id="btnSplit" onclick="setMode('split')" class="btn-mode active px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
+                        </svg>
+                        <span class="hidden sm:inline">書頁式</span>
+                    </button>
+                    <button id="btnText" onclick="setMode('text')" class="btn-mode px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium text-slate-600 hover:bg-stone-100">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <span class="hidden sm:inline">純文字</span>
+                    </button>
+                    <button id="btnPhoto" onclick="setMode('photo')" class="btn-mode px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm font-medium text-slate-600 hover:bg-stone-100">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        <span class="hidden sm:inline">圖片編輯</span>
+                    </button>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <button onclick="previewJournal()" class="px-6 py-2.5 border-2 border-stone-300 rounded-full text-slate-700 hover:bg-stone-50 transition-colors text-sm font-medium">
+                        預覽
+                    </button>
+                    <button id="submitBtn" onclick="saveJournal()" class="px-8 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-full hover:shadow-lg transition-all flex items-center gap-2 text-sm font-medium">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                        </svg>
+                        儲存日誌
+                    </button>
+                </div>
             </div>
-            <div id="errorMessage" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-center"></div>
+        </div>
+    </div>
 
-            <form id="addJournalForm" class="space-y-5">
-                <!-- 日誌類型選擇 -->
-                <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200">
-                    <label class="block text-slate-700 font-medium text-sm mb-3">📝 日誌類型</label>
-                    <div class="flex gap-4">
-                        <label class="flex-1 cursor-pointer">
-                            <input type="radio" name="journalType" value="text" checked class="hidden peer">
-                            <div class="border-2 border-slate-300 peer-checked:border-blue-500 peer-checked:bg-blue-50 rounded-xl p-4 transition-all text-center hover:bg-slate-50">
-                                <svg class="w-10 h-10 mx-auto mb-2 text-slate-600 peer-checked:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                </svg>
-                                <span class="font-medium text-slate-700">純文字</span>
-                                <p class="text-xs text-slate-500 mt-1">僅文字記錄</p>
-                            </div>
-                        </label>
-                        <label class="flex-1 cursor-pointer">
-                            <input type="radio" name="journalType" value="photo" class="hidden peer">
-                            <div class="border-2 border-slate-300 peer-checked:border-purple-500 peer-checked:bg-purple-50 rounded-xl p-4 transition-all text-center hover:bg-slate-50">
-                                <svg class="w-10 h-10 mx-auto mb-2 text-slate-600 peer-checked:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                </svg>
-                                <span class="font-medium text-slate-700">圖文並茂</span>
-                                <p class="text-xs text-slate-500 mt-1">照片+文字</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
+    <!-- Messages -->
+    <div id="successMessage" class="hidden fixed top-24 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 bg-emerald-500 text-white rounded-2xl shadow-2xl flex items-center gap-3">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span class="font-medium">日誌儲存成功！正在返回...</span>
+    </div>
+    <div id="errorMessage" class="hidden fixed top-24 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 bg-red-500 text-white rounded-2xl shadow-2xl flex items-center gap-3">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span id="errorText" class="font-medium"></span>
+    </div>
 
-                <div>
-                    <label class="block text-slate-600 text-sm mb-2">日期</label>
-                    <input type="date" id="date" required
-                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
-                </div>
+    <div class="max-w-7xl mx-auto px-4 py-10">
+        <!-- Title Input -->
+        <input 
+            id="title"
+            type="text"
+            placeholder="輸入你的故事標題..."
+            class="w-full text-4xl md:text-5xl font-serif text-slate-800 border-none outline-none bg-transparent mb-8 placeholder-stone-400"
+        />
 
-                <div>
-                    <label class="block text-slate-600 text-sm mb-2">地點</label>
-                    <input type="text" id="location" placeholder="例如：東京塔" required
-                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
-                </div>
+        <!-- Meta Information -->
+        <div class="flex flex-wrap gap-4 mb-10">
+            <div class="flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-stone-200 shadow-sm">
+                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <input id="date" type="date" class="outline-none text-slate-700" />
+            </div>
+            <div class="flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-stone-200 shadow-sm">
+                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <input id="location" type="text" placeholder="地點" class="outline-none text-slate-700 w-40" />
+            </div>
+            <div class="flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-stone-200 shadow-sm">
+                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <input id="country" type="text" placeholder="國家" class="outline-none text-slate-700 w-32" />
+            </div>
+        </div>
 
-                <div>
-                    <label class="block text-slate-600 text-sm mb-2">國家</label>
-                    <input type="text" id="country" placeholder="例如：日本" required
-                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400">
-                </div>
-
-                <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <label class="block text-slate-600 text-sm mb-3">📍 地點座標</label>
-                    <div class="mb-3">
-                        <div class="flex space-x-2">
-                            <input type="text" id="searchLocation" placeholder="搜尋地點（例如：Tokyo Tower）"
-                                class="flex-1 px-4 py-2 rounded-lg bg-white border border-slate-300 focus:outline-none focus:border-slate-400 text-sm">
-                            <button type="button" onclick="searchCoordinates()" 
-                                class="px-4 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm">
-                                搜尋
-                            </button>
-                        </div>
-                        <p class="text-xs text-slate-500 mt-2">或使用：
-                            <a href="https://www.latlong.net/" target="_blank" class="text-blue-500 hover:underline">LatLong.net</a> | 
-                            <a href="https://www.google.com/maps" target="_blank" class="text-blue-500 hover:underline">Google Maps</a>
-                        </p>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-slate-500 text-xs mb-1">緯度</label>
-                            <input type="number" step="any" id="lat" placeholder="35.6586"
-                                class="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 focus:outline-none focus:border-slate-400 text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-slate-500 text-xs mb-1">經度</label>
-                            <input type="number" step="any" id="lng" placeholder="139.7454"
-                                class="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 focus:outline-none focus:border-slate-400 text-sm">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 照片上傳區（僅圖文模式顯示） -->
-                <div id="photoSection" class="hidden bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
-                    <label class="block text-purple-700 font-medium text-sm mb-3">📸 上傳照片</label>
-                    
-                    <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
-                    
-                    <div id="uploadArea" class="flex flex-col items-center space-y-3">
-                        <button type="button" onclick="document.getElementById('photoInput').click()" 
-                            class="w-full px-4 py-6 bg-white border-2 border-dashed border-purple-300 hover:border-purple-400 rounded-lg transition-colors text-purple-600 hover:text-purple-700">
-                            <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        <!-- Split Mode: Book-style Editor -->
+        <div id="splitMode" class="bg-white rounded-3xl shadow-2xl overflow-hidden border border-stone-200">
+            <div class="grid md:grid-cols-2 divide-x divide-stone-200">
+                <!-- Left: Photo Section -->
+                <div class="p-10 space-y-6 bg-stone-50">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xl font-serif text-slate-800">📸 照片</h3>
+                        <button id="removePhotoBtn" onclick="removePhoto()" class="hidden text-red-500 hover:text-red-700 p-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                             </svg>
-                            <span class="font-medium">點擊選擇照片</span>
                         </button>
-                        <p class="text-xs text-slate-500">支援 JPG、PNG、GIF、WEBP，最大 16MB</p>
+                    </div>
+                    
+                    <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)" />
+                    
+                    <!-- Upload Area -->
+                    <div id="uploadArea">
+                        <label for="photoInput" class="block aspect-[3/4] bg-stone-100 rounded-2xl border-2 border-dashed border-stone-300 cursor-pointer hover:border-emerald-500 transition-all group">
+                            <div class="h-full flex flex-col items-center justify-center text-center p-8">
+                                <svg class="w-20 h-20 text-stone-400 group-hover:text-emerald-600 mb-4 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                <p class="text-slate-700 text-lg font-medium mb-2">點擊上傳照片</p>
+                                <p class="text-stone-500 text-sm">或拖曳檔案至此區域</p>
+                                <p class="text-stone-400 text-xs mt-2">支援 JPG、PNG、GIF，最大 16MB</p>
+                            </div>
+                        </label>
                     </div>
 
-                    <!-- 照片編輯器 -->
-                    <div id="photoEditor" class="hidden space-y-3">
+                    <!-- Photo Editor -->
+                    <div id="photoEditor" class="hidden space-y-4">
                         <div class="photo-editor-container" id="editorContainer">
                             <img id="editorImage" class="photo-editor-image" src="" alt="編輯照片">
-                            <div id="cropOverlay" class="crop-overlay"></div>
                         </div>
                         
-                        <div class="space-y-3 bg-white p-4 rounded-lg">
+                        <div class="space-y-4 bg-white p-5 rounded-xl border border-stone-200">
                             <div>
-                                <label class="block text-sm text-slate-600 mb-2">🔍 縮放大小</label>
+                                <label class="block text-sm font-medium text-slate-700 mb-3">🔍 縮放大小</label>
                                 <input type="range" id="scaleSlider" min="50" max="200" value="100" 
-                                    class="w-full" oninput="updateScale(this.value)">
-                                <div class="flex justify-between text-xs text-slate-500 mt-1">
+                                    class="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer" 
+                                    oninput="updateScale(this.value)">
+                                <div class="flex justify-between text-xs text-slate-500 mt-2">
                                     <span>50%</span>
-                                    <span id="scaleValue">100%</span>
+                                    <span id="scaleValue" class="font-medium text-emerald-700">100%</span>
                                     <span>200%</span>
                                 </div>
                             </div>
                             
-                            <div class="flex gap-2">
-                                <button type="button" onclick="rotateImage(-90)" 
-                                    class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                            <div class="grid grid-cols-3 gap-2">
+                                <button type="button" onclick="rotateImage(-90)" class="px-3 py-2 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors text-sm font-medium text-slate-700">
                                     ↶ 左轉
                                 </button>
-                                <button type="button" onclick="rotateImage(90)" 
-                                    class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                <button type="button" onclick="rotateImage(90)" class="px-3 py-2 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors text-sm font-medium text-slate-700">
                                     ↷ 右轉
                                 </button>
-                                <button type="button" onclick="resetPhoto()" 
-                                    class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm">
+                                <button type="button" onclick="resetPhotoTransform()" class="px-3 py-2 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors text-sm font-medium text-slate-700">
                                     🔄 重設
                                 </button>
                             </div>
                             
-                            <p class="text-xs text-slate-500 text-center">💡 拖曳照片調整位置</p>
+                            <p class="text-xs text-center text-slate-500">💡 提示：可拖曳照片調整位置</p>
                             
-                            <div class="flex gap-2 pt-2">
-                                <button type="button" onclick="confirmPhoto()" 
-                                    class="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors font-medium">
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="confirmPhoto()" class="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-medium hover:shadow-lg transition-all">
                                     ✓ 確認使用
                                 </button>
-                                <button type="button" onclick="cancelPhoto()" 
-                                    class="flex-1 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors">
+                                <button type="button" onclick="cancelPhotoEdit()" class="flex-1 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-medium transition-colors">
                                     ✕ 取消
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 照片預覽 -->
-                    <div id="photoPreview" class="hidden">
-                        <img id="finalPreview" src="" alt="最終預覽" class="w-full h-64 object-cover rounded-lg border-2 border-purple-200">
-                        <button type="button" onclick="removePhoto()" 
-                            class="mt-2 w-full px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors text-sm">
-                            移除照片
+                    <!-- Photo Preview -->
+                    <div id="photoPreview" class="hidden space-y-3">
+                        <img id="finalPreview" src="" alt="最終預覽" class="w-full aspect-[3/4] object-cover rounded-2xl border-2 border-emerald-200 shadow-lg">
+                        <button type="button" onclick="changePhoto()" class="w-full px-4 py-3 bg-white hover:bg-emerald-50 text-emerald-700 rounded-xl border-2 border-emerald-200 font-medium transition-colors">
+                            更換照片
                         </button>
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-slate-600 text-sm mb-2">日誌內容</label>
-                    <textarea id="content" rows="6" placeholder="記錄你的旅程..." required
-                        class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-slate-400 resize-none"></textarea>
+                <!-- Right: Text Section -->
+                <div class="p-10 space-y-4">
+                    <h3 class="text-xl font-serif text-slate-800 mb-4">✍️ 故事</h3>
+                    <textarea 
+                        id="content"
+                        placeholder="在這裡書寫你的旅行故事...&#10;&#10;描述這個地方帶給你的感受、遇見的人、品嚐的美食，或是任何值得紀念的瞬間。讓文字記錄下這段珍貴的回憶。"
+                        class="w-full h-[600px] p-6 border-2 border-stone-200 rounded-2xl resize-none focus:outline-none focus:border-emerald-500 font-serif text-slate-700 text-lg leading-relaxed transition-colors"
+                    ></textarea>
+                    <div class="text-sm text-slate-500 text-right">
+                        <span id="charCount">0</span> 字
+                    </div>
                 </div>
+            </div>
+        </div>
 
-                <div>
-                    <label class="block text-slate-600 text-sm mb-2">互動式地圖</label>
-                    <div id="map" class="w-full h-64 rounded-xl border-2 border-slate-200"></div>
-                </div>
+        <!-- Text Mode -->
+        <div id="textMode" class="hidden bg-white rounded-3xl shadow-2xl p-16 border border-stone-200">
+            <textarea 
+                id="contentText"
+                placeholder="在這裡盡情書寫你的旅行故事...&#10;&#10;每一段旅程都值得被細細記錄。"
+                class="w-full h-[700px] border-none resize-none focus:outline-none font-serif text-xl text-slate-700 leading-relaxed"
+            ></textarea>
+        </div>
 
-                <div class="flex space-x-4 pt-4">
-                    <a href="/dashboard" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-3 rounded-xl text-center transition-colors">
-                        取消
-                    </a>
-                    <button type="submit" id="submitBtn" class="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-3 rounded-xl transition-colors">
-                        儲存日誌
+        <!-- Photo Mode -->
+        <div id="photoMode" class="hidden bg-white rounded-3xl shadow-2xl p-12 border border-stone-200">
+            <h3 class="text-2xl font-serif text-slate-800 mb-8">📷 照片畫廊</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+                <label class="aspect-square bg-stone-100 rounded-2xl border-2 border-dashed border-stone-300 cursor-pointer hover:border-emerald-500 transition-all group">
+                    <input type="file" accept="image/*" class="hidden" />
+                    <div class="h-full flex items-center justify-center">
+                        <svg class="w-16 h-16 text-stone-400 group-hover:text-emerald-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Coordinates Section -->
+        <div class="mt-8 bg-white rounded-2xl p-8 shadow-lg border border-stone-200">
+            <h3 class="text-xl font-serif text-slate-800 mb-6">📍 地點座標</h3>
+            
+            <div class="mb-6">
+                <div class="flex gap-2">
+                    <input id="searchLocation" type="text" placeholder="搜尋地點（例如：Tokyo Tower）"
+                        class="flex-1 px-4 py-3 rounded-xl bg-stone-50 border-2 border-stone-200 focus:outline-none focus:border-emerald-500 transition-colors" />
+                    <button type="button" onclick="searchCoordinates()" 
+                        class="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors font-medium shadow-md hover:shadow-lg">
+                        搜尋
                     </button>
                 </div>
-            </form>
+                <p class="text-xs text-slate-500 mt-3">或使用：
+                    <a href="https://www.latlong.net/" target="_blank" class="text-emerald-600 hover:underline">LatLong.net</a> | 
+                    <a href="https://www.google.com/maps" target="_blank" class="text-emerald-600 hover:underline">Google Maps</a>
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">緯度</label>
+                    <input id="lat" type="number" step="any" placeholder="35.6586"
+                        class="w-full px-4 py-3 rounded-xl bg-stone-50 border-2 border-stone-200 focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">經度</label>
+                    <input id="lng" type="number" step="any" placeholder="139.7454"
+                        class="w-full px-4 py-3 rounded-xl bg-stone-50 border-2 border-stone-200 focus:outline-none focus:border-emerald-500" />
+                </div>
+            </div>
+
+            <div id="map" class="w-full h-80 rounded-2xl border-2 border-stone-200"></div>
         </div>
     </div>
 
     <script>
         let photoBase64 = null;
-        let journalType = 'text';
-        
-        // 照片編輯器變數
+        let editorMode = 'split';
         let originalImage = null;
         let imageScale = 1;
         let imageRotation = 0;
@@ -243,35 +316,43 @@
         let isDragging = false;
         let startX, startY;
 
-        // 監聽日誌類型變更
-        document.querySelectorAll('input[name="journalType"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                journalType = this.value;
-                const photoSection = document.getElementById('photoSection');
-                if (journalType === 'photo') {
-                    photoSection.classList.remove('hidden');
-                } else {
-                    photoSection.classList.add('hidden');
-                    // 清除照片
-                    photoBase64 = null;
-                    resetPhotoUI();
-                }
-            });
+        // 設定今天日期
+        document.getElementById('date').value = new Date().toISOString().split('T')[0];
+
+        // 字數統計
+        document.getElementById('content').addEventListener('input', function() {
+            document.getElementById('charCount').textContent = this.value.length;
         });
 
-        // 處理照片上傳
+        // 模式切換
+        function setMode(mode) {
+            editorMode = mode;
+            
+            document.querySelectorAll('.btn-mode').forEach(btn => btn.classList.remove('active'));
+            
+            document.getElementById('splitMode').classList.add('hidden');
+            document.getElementById('textMode').classList.add('hidden');
+            document.getElementById('photoMode').classList.add('hidden');
+            
+            if (mode === 'split') {
+                document.getElementById('splitMode').classList.remove('hidden');
+                document.getElementById('btnSplit').classList.add('active');
+            } else if (mode === 'text') {
+                document.getElementById('textMode').classList.remove('hidden');
+                document.getElementById('btnText').classList.add('active');
+            } else if (mode === 'photo') {
+                document.getElementById('photoMode').classList.remove('hidden');
+                document.getElementById('btnPhoto').classList.add('active');
+            }
+        }
+
+        // 照片上傳
         function handlePhotoUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
             if (file.size > 16 * 1024 * 1024) {
-                alert('檔案太大！請選擇小於 16MB 的照片。');
-                return;
-            }
-
-            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-            if (!allowedTypes.includes(file.type)) {
-                alert('不支援的檔案格式！');
+                showError('檔案太大！請選擇小於 16MB 的照片');
                 return;
             }
 
@@ -283,9 +364,9 @@
             reader.readAsDataURL(file);
         }
 
-        // 顯示照片編輯器
         function showPhotoEditor() {
             document.getElementById('uploadArea').classList.add('hidden');
+            document.getElementById('photoPreview').classList.add('hidden');
             document.getElementById('photoEditor').classList.remove('hidden');
             
             const img = document.getElementById('editorImage');
@@ -296,72 +377,58 @@
             };
         }
 
-        // 初始化拖曳功能
         function initDragAndDrop() {
             const container = document.getElementById('editorContainer');
-            const img = document.getElementById('editorImage');
-
-            container.onmousedown = function(e) {
+            
+            container.onmousedown = startDrag;
+            document.onmousemove = drag;
+            document.onmouseup = stopDrag;
+            
+            container.ontouchstart = function(e) {
+                startDrag(e.touches[0]);
+            };
+            document.ontouchmove = function(e) {
+                drag(e.touches[0]);
+                e.preventDefault();
+            };
+            document.ontouchend = stopDrag;
+            
+            function startDrag(e) {
                 isDragging = true;
                 startX = e.clientX - imageX;
                 startY = e.clientY - imageY;
                 container.style.cursor = 'grabbing';
-            };
-
-            document.onmousemove = function(e) {
+            }
+            
+            function drag(e) {
                 if (!isDragging) return;
                 imageX = e.clientX - startX;
                 imageY = e.clientY - startY;
                 updateImageTransform();
-            };
-
-            document.onmouseup = function() {
+            }
+            
+            function stopDrag() {
                 isDragging = false;
                 container.style.cursor = 'move';
-            };
-
-            // 觸控支援
-            container.ontouchstart = function(e) {
-                isDragging = true;
-                const touch = e.touches[0];
-                startX = touch.clientX - imageX;
-                startY = touch.clientY - imageY;
-            };
-
-            document.ontouchmove = function(e) {
-                if (!isDragging) return;
-                const touch = e.touches[0];
-                imageX = touch.clientX - startX;
-                imageY = touch.clientY - startY;
-                updateImageTransform();
-                e.preventDefault();
-            };
-
-            document.ontouchend = function() {
-                isDragging = false;
-            };
+            }
         }
 
-        // 更新縮放
         function updateScale(value) {
             imageScale = value / 100;
             document.getElementById('scaleValue').textContent = value + '%';
             updateImageTransform();
         }
 
-        // 旋轉照片
         function rotateImage(degrees) {
             imageRotation += degrees;
             updateImageTransform();
         }
 
-        // 更新照片變換
         function updateImageTransform() {
             const img = document.getElementById('editorImage');
             img.style.transform = `translate(${imageX}px, ${imageY}px) scale(${imageScale}) rotate(${imageRotation}deg)`;
         }
 
-        // 重設照片變換
         function resetPhotoTransform() {
             const container = document.getElementById('editorContainer');
             const img = document.getElementById('editorImage');
@@ -377,12 +444,6 @@
             updateImageTransform();
         }
 
-        // 重設照片
-        function resetPhoto() {
-            resetPhotoTransform();
-        }
-
-        // 確認使用照片
         function confirmPhoto() {
             const container = document.getElementById('editorContainer');
             const canvas = document.createElement('canvas');
@@ -406,38 +467,39 @@
             img.src = originalImage;
         }
 
-        // 顯示最終預覽
         function showFinalPreview() {
             document.getElementById('photoEditor').classList.add('hidden');
             document.getElementById('photoPreview').classList.remove('hidden');
             document.getElementById('finalPreview').src = photoBase64;
+            document.getElementById('removePhotoBtn').classList.remove('hidden');
         }
 
-        // 取消照片
-        function cancelPhoto() {
-            resetPhotoUI();
-        }
-
-        // 移除照片
-        function removePhoto() {
-            photoBase64 = null;
-            resetPhotoUI();
-        }
-
-        // 重設照片 UI
-        function resetPhotoUI() {
+        function cancelPhotoEdit() {
             document.getElementById('photoInput').value = '';
-            document.getElementById('uploadArea').classList.remove('hidden');
             document.getElementById('photoEditor').classList.add('hidden');
-            document.getElementById('photoPreview').classList.add('hidden');
-            originalImage = null;
-            imageScale = 1;
-            imageRotation = 0;
-            imageX = 0;
-            imageY = 0;
+            
+            if (photoBase64) {
+                document.getElementById('photoPreview').classList.remove('hidden');
+            } else {
+                document.getElementById('uploadArea').classList.remove('hidden');
+            }
         }
 
-        // 地圖初始化
+        function changePhoto() {
+            document.getElementById('photoInput').click();
+        }
+
+        function removePhoto() {
+            if (!confirm('確定要移除照片嗎？')) return;
+            
+            photoBase64 = null;
+            document.getElementById('photoInput').value = '';
+            document.getElementById('photoPreview').classList.add('hidden');
+            document.getElementById('uploadArea').classList.remove('hidden');
+            document.getElementById('removePhotoBtn').classList.add('hidden');
+        }
+
+        // 地圖
         const map = L.map('map').setView([25.0330, 121.5654], 3);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
@@ -461,7 +523,7 @@
         async function searchCoordinates() {
             const searchTerm = document.getElementById('searchLocation').value.trim();
             if (!searchTerm) {
-                alert('請輸入要搜尋的地點');
+                showError('請輸入要搜尋的地點');
                 return;
             }
 
@@ -473,12 +535,11 @@
                     const lat = parseFloat(data[0].lat);
                     const lng = parseFloat(data[0].lon);
                     updateMarkerAndInputs(lat, lng);
-                    alert(`找到地點：${data[0].display_name}`);
                 } else {
-                    alert('找不到該地點');
+                    showError('找不到該地點');
                 }
             } catch (error) {
-                alert('搜尋失敗');
+                showError('搜尋失敗');
             }
         }
 
@@ -489,43 +550,27 @@
             }
         });
 
-        document.getElementById('date').value = new Date().toISOString().split('T')[0];
-
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            errorDiv.textContent = '❌ ' + message;
-            errorDiv.classList.remove('hidden');
-            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
-        }
-
-        function showSuccessAndRedirect() {
-            document.getElementById('successMessage').classList.remove('hidden');
-            setTimeout(() => window.location.href = '/dashboard', 1500);
-        }
-
-        document.getElementById('addJournalForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            // 檢查圖文模式是否有上傳照片
-            if (journalType === 'photo' && !photoBase64) {
-                showError('圖文並茂模式需要上傳照片');
-                return;
-            }
-
-            const submitBtn = document.getElementById('submitBtn');
-            submitBtn.disabled = true;
-            submitBtn.textContent = '儲存中...';
-
+        // 儲存日誌
+        async function saveJournal() {
             const data = {
                 date: document.getElementById('date').value,
                 location: document.getElementById('location').value,
                 country: document.getElementById('country').value,
                 lat: parseFloat(document.getElementById('lat').value) || 0,
                 lng: parseFloat(document.getElementById('lng').value) || 0,
-                content: document.getElementById('content').value,
-                photo: journalType === 'photo' ? photoBase64 : null,
-                journal_type: journalType
+                content: editorMode === 'text' ? document.getElementById('contentText').value : document.getElementById('content').value,
+                photo: photoBase64,
+                journal_type: photoBase64 ? 'photo' : 'text'
             };
+
+            if (!data.location || !data.country || !data.content) {
+                showError('請填寫地點、國家和內容');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span class="ml-2">儲存中...</span>';
 
             try {
                 const res = await fetch('/api/journals', {
@@ -537,19 +582,37 @@
                 const result = await res.json();
 
                 if (result.success) {
-                    showSuccessAndRedirect();
+                    showSuccess();
+                    setTimeout(() => window.location.href = '/dashboard', 1500);
                 } else {
-                    showError(result.message || '請稍後再試');
+                    showError(result.message || '儲存失敗');
                     submitBtn.disabled = false;
-                    submitBtn.textContent = '儲存日誌';
+                    submitBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg><span class="ml-2">儲存日誌</span>';
                 }
             } catch (err) {
                 console.error('提交錯誤:', err);
                 showError('伺服器錯誤');
                 submitBtn.disabled = false;
-                submitBtn.textContent = '儲存日誌';
+                submitBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg><span class="ml-2">儲存日誌</span>';
             }
-        });
+        }
+
+        function showSuccess() {
+            const msg = document.getElementById('successMessage');
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
+        function showError(message) {
+            const msg = document.getElementById('errorMessage');
+            document.getElementById('errorText').textContent = message;
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 5000);
+        }
+
+        function previewJournal() {
+            alert('預覽功能開發中...');
+        }
     </script>
 </body>
 </html>

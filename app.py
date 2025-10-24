@@ -91,7 +91,7 @@ class Journal(db.Model):
     lat = db.Column(db.Float, default=0.0)
     lng = db.Column(db.Float, default=0.0)
     photo = db.Column(db.Text, nullable=True)
-    journal_type = db.Column(db.String(20), default='text')  # 新增：日誌類型 'text' 或 'photo'
+    journal_type = db.Column(db.String(20), default='text')
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -120,7 +120,7 @@ def _get_request_data():
             return {}
     return request.form.to_dict()
 
-# 路由保持原樣，只修改需要的部分
+# 路由
 @app.route('/')
 def index():
     """首頁 - 顯示歡迎介面"""
@@ -289,7 +289,8 @@ def dashboard():
                 'content': j.content,
                 'lat': float(j.lat) if j.lat else 0.0,
                 'lng': float(j.lng) if j.lng else 0.0,
-                'photo': j.photo  # 新增照片欄位
+                'photo': j.photo,
+                'journal_type': j.journal_type or 'text'
             })
         
         countries = list({j.country for j in journals})
@@ -362,9 +363,12 @@ def _create_journal_from_data(data):
         location = (data.get('location') or '').strip()
         country = (data.get('country') or '').strip()
         content = (data.get('content') or '').strip()
-        photo = data.get('photo')  # 新增：取得照片 base64 資料
+        photo = data.get('photo')
 
-        logger.info(f"嘗試建立日誌: date={date}, location={location}, country={country}")
+        # 自動判斷日誌類型
+        journal_type = 'photo' if photo else 'text'
+
+        logger.info(f"嘗試建立日誌: date={date}, location={location}, country={country}, type={journal_type}")
 
         if not location or not country or not content:
             return ({'success': False, 'message': 'location, country, content 為必填'}, 400)
@@ -393,14 +397,15 @@ def _create_journal_from_data(data):
             content=content,
             lat=lat,
             lng=lng,
-            photo=photo,  # 新增：儲存照片
+            photo=photo,
+            journal_type=journal_type,
             user_id=session['user_id']
         )
         
         db.session.add(new_journal)
         db.session.commit()
         
-        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}")
+        logger.info(f"✅ 日誌建立成功: ID={new_journal.id}, User={session['user_id']}, Location={location}, Type={journal_type}")
         
         return ({'success': True, 'id': new_journal.id, 'journal': {
             'id': new_journal.id,
@@ -410,7 +415,8 @@ def _create_journal_from_data(data):
             'content': new_journal.content,
             'lat': new_journal.lat,
             'lng': new_journal.lng,
-            'photo': new_journal.photo
+            'photo': new_journal.photo,
+            'journal_type': new_journal.journal_type
         }}, 201)
     except Exception as e:
         db.session.rollback()
@@ -437,7 +443,8 @@ def journals_api():
             'content': j.content,
             'lat': float(j.lat) if j.lat else 0.0,
             'lng': float(j.lng) if j.lng else 0.0,
-            'photo': j.photo
+            'photo': j.photo,
+            'journal_type': j.journal_type or 'text'
         } for j in journals])
     except Exception as e:
         logger.error(f"取得日誌列表失敗: {e}\n{traceback.format_exc()}")
@@ -466,8 +473,11 @@ def journal_detail(journal_id):
             journal.country = data.get('country', journal.country)
             journal.content = data.get('content', journal.content)
             
+            # 處理照片更新
             if 'photo' in data:
                 journal.photo = data.get('photo')
+                # 自動更新 journal_type
+                journal.journal_type = 'photo' if journal.photo else 'text'
             
             if 'lat' in data:
                 try:
@@ -482,7 +492,7 @@ def journal_detail(journal_id):
             
             journal.updated_at = datetime.utcnow()
             db.session.commit()
-            logger.info(f"更新日誌成功: {journal_id}")
+            logger.info(f"更新日誌成功: {journal_id}, Type: {journal.journal_type}")
             
             return jsonify({
                 'success': True,
@@ -494,7 +504,8 @@ def journal_detail(journal_id):
                     'content': journal.content,
                     'lat': float(journal.lat) if journal.lat else 0.0,
                     'lng': float(journal.lng) if journal.lng else 0.0,
-                    'photo': journal.photo
+                    'photo': journal.photo,
+                    'journal_type': journal.journal_type or 'text'
                 }
             })
         
@@ -506,7 +517,8 @@ def journal_detail(journal_id):
             'content': journal.content,
             'lat': float(journal.lat) if journal.lat else 0.0,
             'lng': float(journal.lng) if journal.lng else 0.0,
-            'photo': journal.photo
+            'photo': journal.photo,
+            'journal_type': journal.journal_type or 'text'
         })
     except Exception as e:
         db.session.rollback()
@@ -528,11 +540,36 @@ def journals_by_country(country):
             'content': j.content,
             'lat': float(j.lat) if j.lat else 0.0,
             'lng': float(j.lng) if j.lng else 0.0,
-            'photo': j.photo
+            'photo': j.photo,
+            'journal_type': j.journal_type or 'text'
         } for j in journals])
     except Exception as e:
         logger.error(f"按國家查詢日誌失敗: {e}")
         return jsonify({'success': False, 'message': '查詢失敗'}), 500
+
+@app.route('/admin/migrate-journal-types')
+def migrate_journal_types():
+    """資料庫遷移：為舊日誌補上 journal_type（僅供管理員使用）"""
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    try:
+        journals = Journal.query.filter(Journal.journal_type == None).all()
+        count = 0
+        for j in journals:
+            j.journal_type = 'photo' if j.photo else 'text'
+            count += 1
+        
+        db.session.commit()
+        logger.info(f"✅ 資料庫遷移成功：已更新 {count} 筆日誌的類型")
+        return jsonify({
+            'success': True,
+            'message': f'已更新 {count} 筆日誌的類型'
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"遷移失敗: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
 def health_check():
